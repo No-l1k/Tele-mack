@@ -1,0 +1,202 @@
+.sheet {
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 2rem;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #000;
+  background: #fff;
+}
+
+.headerCenter {
+  text-align: center;
+  margin-bottom: 0.35rem;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.siteLine {
+  font-size: 11px;
+  margin: 0;
+}
+
+.topContacts {
+  margin-bottom: 0.75rem;
+  font-size: 11px;
+}
+
+.topContacts p {
+  margin: 0 0 0.15rem;
+}
+
+.metaGrid {
+  margin-bottom: 0.75rem;
+}
+
+.metaRow {
+  display: grid;
+  grid-template-columns: 10.5rem 1fr;
+  gap: 0.35rem 0.75rem;
+  margin-bottom: 0.25rem;
+  align-items: baseline;
+}
+
+.metaLabel {
+  font-weight: 600;
+}
+
+.paymentRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.logoWrap {
+  display: flex;
+  justify-content: center;
+  margin: 0.75rem 0 1rem;
+}
+
+.logoBadge {
+  display: inline-block;
+  padding: 0.45rem 1.75rem;
+  border-radius: 999px;
+  background: #2d2d2d;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #000;
+  font-size: 10px;
+}
+
+.table th,
+.table td {
+  border: 1px solid #000;
+  padding: 0.35rem 0.4rem;
+  vertical-align: top;
+}
+
+.table thead th {
+  background: #e8e8e8;
+  font-weight: 600;
+  text-align: center;
+}
+
+.colNum {
+  width: 2rem;
+  text-align: center;
+}
+
+.colSku {
+  width: 4.5rem;
+  text-align: center;
+}
+
+.colProduct {
+  text-align: left;
+  min-width: 8rem;
+}
+
+.colUnit {
+  width: 2.25rem;
+  text-align: center;
+}
+
+.colPrice {
+  width: 5.5rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.colQty {
+  width: 2.5rem;
+  text-align: center;
+}
+
+.colSum {
+  width: 6rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.deliveryCell {
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.deliveryIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.legal {
+  font-size: 9.5px;
+  line-height: 1.45;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.legal p {
+  margin: 0 0 0.5rem;
+}
+
+.signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 1.25rem;
+  font-size: 10px;
+}
+
+.sigLine {
+  border-bottom: 1px solid #000;
+  min-height: 2rem;
+  margin-bottom: 0.25rem;
+}
+
+.sigLabel {
+  text-align: center;
+}
+
+@media print {
+  .sheet {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  .table tbody tr {
+    break-inside: avoid;
+  }
+}

@@ -1,0 +1,78 @@
+services:
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    restart: always
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      ADMIN_LOGIN: ${ADMIN_LOGIN:?ADMIN_LOGIN is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      API_PREFIX: /api
+      DB_AUTO_CREATE: "false"
+      ENVIRONMENT: production
+      ALLOW_DEV_AUTH_CODES: "false"
+      ALLOW_ADMIN_BOOTSTRAP: "false"
+      EXPOSE_DOCS: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://tele-makc.ru}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:-tele-makc.ru,www.tele-makc.ru,localhost,127.0.0.1}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://tele-makc.ru}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD is required}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      ORDER_NOTIFY_TO: ${ORDER_NOTIFY_TO:?ORDER_NOTIFY_TO is required}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - backend_uploads:/app/uploads
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # Same-origin API via nginx (/api → backend)
+        NEXT_PUBLIC_API_URL: /api
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://tele-makc.ru}
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  backend_uploads:
