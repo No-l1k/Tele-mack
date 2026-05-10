@@ -1,20 +1,12 @@
 import { MetadataRoute } from 'next'
 import { siteConfig } from '@/lib/site'
+import { getApiBaseUrl } from '@/lib/api-base-url'
 
 type ApiEnvelope<T> = { data: T }
 type Category = { slug: string }
 type Product = { slug: string; createdAt?: string }
 
 export const dynamic = 'force-dynamic'
-
-function resolveApiBaseUrl(baseUrl: string): string {
-  const configured = process.env.NEXT_PUBLIC_API_URL || '/api'
-  if (/^https?:\/\//i.test(configured)) {
-    return configured.replace(/\/+$/, '')
-  }
-  const normalizedPath = configured.startsWith('/') ? configured : `/${configured}`
-  return `${baseUrl.replace(/\/+$/, '')}${normalizedPath}`
-}
 
 async function fetchApiData<T>(apiBaseUrl: string, endpoint: string, fallback: T): Promise<T> {
   const controller = new AbortController()
@@ -36,7 +28,7 @@ async function fetchApiData<T>(apiBaseUrl: string, endpoint: string, fallback: T
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = siteConfig.url.replace(/\/+$/, '')
-  const apiBaseUrl = resolveApiBaseUrl(baseUrl)
+  const apiBaseUrl = getApiBaseUrl()
 
   const [categories, products] = await Promise.all([
     fetchApiData<Category[]>(apiBaseUrl, '/categories', []),

@@ -1,6 +1,5 @@
 import type { Category, Product, ProductFilters } from '@/types'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+import { getApiBaseUrl } from '@/lib/api-base-url'
 
 type ApiEnvelope<T> = {
   data: T
@@ -42,7 +41,7 @@ function normalizeCategory(category: Category): Category {
 }
 
 async function apiGet<T>(endpoint: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
     next: { revalidate: 60 },
   })
 

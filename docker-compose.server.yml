@@ -65,6 +65,9 @@ services:
     restart: always
     depends_on:
       - backend
+    environment:
+      # SSR внутри контейнера: прямой вызов FastAPI (не относительный /api на порту 3000)
+      API_URL_INTERNAL: http://backend:8000/api
     ports:
       - "127.0.0.1:3000:3000"
     healthcheck:
