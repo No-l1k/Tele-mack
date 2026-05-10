@@ -1,11 +1,37 @@
 from __future__ import annotations
 
+import socket
 import smtplib
 import ssl
 from email.message import EmailMessage
 
 from ..config import settings
 from ..models import Order
+
+
+class SMTP_SSL_IPV4(smtplib.SMTP_SSL):
+    """
+    Подключение к SMTP только по IPv4.
+    На части VPS IPv6 из DNS есть, а маршрута нет — socket.create_connection даёт Errno 101.
+    """
+
+    def _get_socket(self, host, port, timeout):
+        if self.debuglevel > 0:
+            self._print_debug("connect (IPv4 only):", (host, port))
+        last_exc: OSError | None = None
+        source_address = getattr(self, "source_address", None)
+        for _fam, _type, _proto, _canon, sockaddr in socket.getaddrinfo(
+            host, port, socket.AF_INET, socket.SOCK_STREAM
+        ):
+            try:
+                sock = socket.create_connection(sockaddr, timeout=timeout, source_address=source_address)
+                return self.context.wrap_socket(sock, server_hostname=host)
+            except OSError as exc:
+                last_exc = exc
+                continue
+        if last_exc is not None:
+            raise last_exc
+        raise OSError(f"No IPv4 address for SMTP host {host!r}:{port}")
 
 DELIVERY_METHOD_LABELS = {
     "courier": "Курьер",
@@ -37,7 +63,7 @@ def _send_email(subject: str, body: str) -> None:
     message.set_content(body)
 
     context = ssl.create_default_context()
-    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context, timeout=15) as smtp:
+    with SMTP_SSL_IPV4(settings.smtp_host, settings.smtp_port, context=context, timeout=15) as smtp:
         smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(message)
 
