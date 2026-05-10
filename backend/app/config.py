@@ -40,7 +40,13 @@ class Settings(BaseSettings):
 
     @property
     def trusted_host_list(self) -> list[str]:
-        return [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
+        raw = [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
+        # Всегда разрешаем loopback: иначе TrustedHostMiddleware режет healthcheck из Docker
+        # (GET http://127.0.0.1:8000/...) и контейнер помечается unhealthy.
+        for required in ("localhost", "127.0.0.1"):
+            if required not in raw:
+                raw.append(required)
+        return raw
 
     @property
     def order_notify_to_list(self) -> list[str]:

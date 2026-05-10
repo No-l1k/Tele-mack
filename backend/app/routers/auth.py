@@ -87,12 +87,15 @@ def logout():
 def admin_login(payload: AdminLoginIn, request: Request, db: Session = Depends(get_db)):
     rate_limit(request, key="auth_admin_login", max_requests=5, window_seconds=60)
     user = db.query(User).filter(User.phone == payload.login).first()
+    any_admin = db.query(User).filter(User.role == "admin").count() > 0
 
+    # Первый админ при пустой БД: если ни одного admin нет — создаём из ADMIN_* без ALLOW_ADMIN_BOOTSTRAP.
+    # После появления любого admin дополнительные пользователи только при allow_admin_bootstrap=true.
     if (
-        settings.allow_admin_bootstrap
-        and not user
+        not user
         and payload.login == settings.admin_login
         and payload.password == settings.admin_password
+        and (settings.allow_admin_bootstrap or not any_admin)
     ):
         user = User(
             phone=settings.admin_login,
