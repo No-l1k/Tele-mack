@@ -13,6 +13,8 @@ import {
 import Link from 'next/link'
 import { Truck, Shield, CreditCard, Headphones } from 'lucide-react'
 
+export const dynamic = 'force-dynamic'
+
 const features = [
   {
     icon: Truck,
