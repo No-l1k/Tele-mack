@@ -2,7 +2,7 @@
  * API Service Layer
  * 
  * Этот файл содержит все API вызовы для интеграции с Python бэкендом.
- * Замените BASE_URL на URL вашего бэкенда.
+ * База для запросов задаётся через getApiBaseUrl() (на сервере — API_URL_INTERNAL).
  * 
  * Все методы возвращают Promise и обрабатывают ошибки единообразно.
  */
@@ -20,6 +20,8 @@ import type {
   DashboardStats,
   OrderStatus,
 } from '@/types'
+
+import { getApiBaseUrl } from '@/lib/api-base-url'
 
 interface ProductWritePayload {
   name: string
@@ -57,9 +59,6 @@ type CategoryUpdatePayload = Partial<Omit<Category, 'children' | 'parentId'>> & 
   parentId?: number | null
 }
 
-// Единый дефолт для локальной разработки без proxy.
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
-
 function formatApiErrorBody(body: unknown): string {
   if (!body || typeof body !== 'object') return 'Ошибка сервера'
   const record = body as Record<string, unknown>
@@ -86,7 +85,7 @@ async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${BASE_URL}${endpoint}`
+  const url = `${getApiBaseUrl()}${endpoint}`
   
   const config: RequestInit = {
     headers: {
@@ -192,7 +191,7 @@ export const productsApi = {
     const formData = new FormData()
     files.forEach((file) => formData.append('images', file))
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-    const response = await fetch(`${BASE_URL}/products/${id}/images`, {
+    const response = await fetch(`${getApiBaseUrl()}/products/${id}/images`, {
       method: 'POST',
       body: formData,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -263,7 +262,7 @@ export const productsApi = {
    * GET /products/export - Экспорт товаров в CSV (admin)
    */
   export: (): Promise<Blob> => {
-    return fetch(`${BASE_URL}/products/export`, {
+    return fetch(`${getApiBaseUrl()}/products/export`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
       },
@@ -334,7 +333,7 @@ export const categoriesApi = {
     const formData = new FormData()
     formData.append('image', image)
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-    const response = await fetch(`${BASE_URL}/categories/${id}/image`, {
+    const response = await fetch(`${getApiBaseUrl()}/categories/${id}/image`, {
       method: 'POST',
       body: formData,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -448,7 +447,7 @@ export const ordersApi = {
     if (params?.from) searchParams.set('from', params.from)
     if (params?.to) searchParams.set('to', params.to)
     
-    return fetch(`${BASE_URL}/orders/export?${searchParams.toString()}`, {
+    return fetch(`${getApiBaseUrl()}/orders/export?${searchParams.toString()}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
       },
@@ -734,7 +733,7 @@ export const settingsApi = {
     const formData = new FormData()
     files.forEach((file) => formData.append('images', file))
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-    const response = await fetch(`${BASE_URL}/admin/settings/hero-images`, {
+    const response = await fetch(`${getApiBaseUrl()}/admin/settings/hero-images`, {
       method: 'POST',
       body: formData,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
