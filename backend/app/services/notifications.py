@@ -9,6 +9,27 @@ from ..config import settings
 from ..models import Order
 
 
+class SMTP_IPV4(smtplib.SMTP):
+    """Обычный SMTP (порт 587) с коннектом только по IPv4 — затем STARTTLS."""
+
+    def _get_socket(self, host, port, timeout):
+        if self.debuglevel > 0:
+            self._print_debug("connect (IPv4 plain):", (host, port))
+        last_exc: OSError | None = None
+        source_address = getattr(self, "source_address", None)
+        for _fam, _type, _proto, _canon, sockaddr in socket.getaddrinfo(
+            host, port, socket.AF_INET, socket.SOCK_STREAM
+        ):
+            try:
+                return socket.create_connection(sockaddr, timeout=timeout, source_address=source_address)
+            except OSError as exc:
+                last_exc = exc
+                continue
+        if last_exc is not None:
+            raise last_exc
+        raise OSError(f"No IPv4 address for SMTP host {host!r}:{port}")
+
+
 class SMTP_SSL_IPV4(smtplib.SMTP_SSL):
     """
     Подключение к SMTP только по IPv4.
@@ -63,7 +84,18 @@ def _send_email(subject: str, body: str) -> None:
     message.set_content(body)
 
     context = ssl.create_default_context()
-    with SMTP_SSL_IPV4(settings.smtp_host, settings.smtp_port, context=context, timeout=15) as smtp:
+    timeout = 30
+    port = settings.smtp_port
+
+    # 587 — submission + STARTTLS (часто открыт, если провайдер режет 465).
+    if port == 587:
+        with SMTP_IPV4(settings.smtp_host, port, timeout=timeout) as smtp:
+            smtp.starttls(context=context)
+            smtp.login(settings.smtp_user, settings.smtp_password)
+            smtp.send_message(message)
+        return
+
+    with SMTP_SSL_IPV4(settings.smtp_host, port, context=context, timeout=timeout) as smtp:
         smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(message)
 
