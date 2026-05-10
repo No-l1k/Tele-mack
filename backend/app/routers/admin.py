@@ -327,8 +327,9 @@ def delete_hero_image(url: str, db: Session = Depends(get_db)):
                 alt_target.relative_to(root.resolve())
             except ValueError:
                 pass
-            elif alt_target.is_file():
-                alt_target.unlink()
+            else:
+                if alt_target.is_file():
+                    alt_target.unlink()
 
     return ApiResponse(data=settings_data["heroBanners"])
 
