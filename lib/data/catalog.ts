@@ -28,7 +28,7 @@ function normalizeProduct(product: Product): Product {
     ...product,
     id: String(product.id),
     categoryId: String(product.categoryId),
-    images: product.images?.length ? product.images : ['/images/placeholders/product.svg'],
+    images: product.images?.length ? product.images : ['/placeholder.svg'],
   }
 }
 

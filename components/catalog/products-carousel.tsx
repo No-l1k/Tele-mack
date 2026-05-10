@@ -56,7 +56,7 @@ export function ProductsCarousel({ products }: ProductsCarouselProps) {
       {/* Products container */}
       <div
         ref={scrollRef}
-        className="grid grid-flow-col auto-cols-[minmax(160px,1fr)] sm:auto-cols-[minmax(200px,1fr)] md:auto-cols-[minmax(220px,1fr)] lg:auto-cols-[minmax(240px,1fr)] gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2 -mx-4 px-4"
+        className="grid grid-flow-col auto-cols-[minmax(160px,280px)] sm:auto-cols-[minmax(200px,300px)] md:auto-cols-[minmax(220px,320px)] lg:auto-cols-[minmax(240px,340px)] gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2 -mx-4 px-4"
       >
         {products.map(product => (
           <div

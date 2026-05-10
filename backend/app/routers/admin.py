@@ -257,7 +257,8 @@ async def upload_hero_images(request: Request, images: list[UploadFile] = File(.
     settings_data = dict(row.value or {})
     existing_images = _normalize_hero_banners(settings_data.get("heroBanners"))
     allowed_mime_types = {item.strip() for item in settings.allowed_image_mime_types.split(",") if item.strip()}
-    upload_dir = Path(__file__).resolve().parents[2] / "uploads" / "banners"
+    # Не «banners» в URL: браузерные блокировщики режут пути с /banner(s)/ как рекламу (net::ERR_BLOCKED_BY_CLIENT).
+    upload_dir = Path(__file__).resolve().parents[2] / "uploads" / "hero"
     upload_dir.mkdir(parents=True, exist_ok=True)
     uploaded_urls: list[str] = []
 
@@ -277,7 +278,7 @@ async def upload_hero_images(request: Request, images: list[UploadFile] = File(.
         filename = f"hero-{uuid4().hex}{ext}"
         file_path = upload_dir / filename
         file_path.write_bytes(content)
-        uploaded_urls.append(f"/uploads/banners/{filename}")
+        uploaded_urls.append(f"/uploads/hero/{filename}")
 
     settings_data["heroBanners"] = [*existing_images, *({"image": url, "href": ""} for url in uploaded_urls)]
     row.value = settings_data
@@ -309,7 +310,8 @@ def delete_hero_image(url: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(row)
 
-    if url.startswith("/uploads/banners/"):
+    allowed_prefixes = ("/uploads/banners/", "/uploads/hero/")
+    if url.startswith(allowed_prefixes):
         root = Path(__file__).resolve().parents[2]
         target = (root / url.lstrip("/")).resolve()
         try:
@@ -318,6 +320,15 @@ def delete_hero_image(url: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Некорректный путь к файлу") from None
         if target.is_file():
             target.unlink()
+        elif url.startswith("/uploads/banners/"):
+            alt = url.replace("/uploads/banners/", "/uploads/hero/", 1)
+            alt_target = (root / alt.lstrip("/")).resolve()
+            try:
+                alt_target.relative_to(root.resolve())
+            except ValueError:
+                pass
+            elif alt_target.is_file():
+                alt_target.unlink()
 
     return ApiResponse(data=settings_data["heroBanners"])
 
