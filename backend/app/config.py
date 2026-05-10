@@ -43,7 +43,8 @@ class Settings(BaseSettings):
         raw = [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
         # Всегда разрешаем loopback: иначе TrustedHostMiddleware режет healthcheck из Docker
         # (GET http://127.0.0.1:8000/...) и контейнер помечается unhealthy.
-        for required in ("localhost", "127.0.0.1"):
+        # Имя сервиса docker-compose: SSR фронта ходит на http://backend:8000 (см. API_URL_INTERNAL).
+        for required in ("localhost", "127.0.0.1", "backend"):
             if required not in raw:
                 raw.append(required)
         return raw

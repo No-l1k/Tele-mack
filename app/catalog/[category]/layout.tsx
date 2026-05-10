@@ -8,16 +8,23 @@ type CategoryLayoutProps = {
 }
 
 export async function generateMetadata({ params }: CategoryLayoutProps): Promise<Metadata> {
-  const { category } = await params
-  const categoryData = await getCategoryBySlug(category)
-  if (!categoryData) {
-    return {
-      title: 'Категория не найдена',
+  try {
+    const { category } = await params
+    const categoryData = await getCategoryBySlug(category)
+    if (!categoryData) {
+      return {
+        title: 'Категория не найдена',
+      }
     }
-  }
-  return {
-    title: `${categoryData.name} - Каталог`,
-    description: categoryData.description || `Товары категории ${categoryData.name}`,
+    return {
+      title: `${categoryData.name} - Каталог`,
+      description: categoryData.description || `Товары категории ${categoryData.name}`,
+    }
+  } catch {
+    return {
+      title: 'Каталог',
+      description: 'Каталог товаров',
+    }
   }
 }
 

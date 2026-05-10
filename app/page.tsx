@@ -44,7 +44,9 @@ export default async function HomePage() {
     getNewProducts().catch(() => []),
     getBrands(12).catch(() => []),
   ])
-  const rootCategories = categories.filter((category) => !category.parentId && category.showOnHome)
+  const rootCategories = categories
+    .filter((category) => !category.parentId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   return (
     <>

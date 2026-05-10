@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo } from 'react'
 import { X, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -32,8 +32,20 @@ export function ProductFilters({
   onInStockChange,
   onReset,
 }: ProductFiltersProps) {
-  const hasFilters = selectedBrands.length > 0 || inStockOnly || 
-    selectedPriceRange[0] !== priceRange.min || selectedPriceRange[1] !== priceRange.max
+  const sliderBounds = useMemo(() => {
+    const min = priceRange.min
+    let max = priceRange.max
+    if (max <= min) {
+      max = min + 1000
+    }
+    return { min, max }
+  }, [priceRange.min, priceRange.max])
+
+  const hasFilters =
+    selectedBrands.length > 0 ||
+    inStockOnly ||
+    selectedPriceRange[0] !== sliderBounds.min ||
+    selectedPriceRange[1] !== sliderBounds.max
 
   const FilterContent = () => (
     <div className="space-y-6">
@@ -43,8 +55,8 @@ export function ProductFilters({
         <div className="px-2">
           <Slider
             value={selectedPriceRange}
-            min={priceRange.min}
-            max={priceRange.max}
+            min={sliderBounds.min}
+            max={sliderBounds.max}
             step={1000}
             onValueChange={(value) => onPriceRangeChange(value as [number, number])}
             className="mb-4"

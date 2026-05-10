@@ -78,6 +78,27 @@ def _validate_rating_mode(value: str) -> str:
     return normalized
 
 
+def _normalize_gtin(value: str | None) -> str | None:
+    """GTIN/EAN: только цифры; пробелы убираются. Пустое поле → None."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    digits = "".join(c for c in raw if c.isdigit())
+    if not digits:
+        raise HTTPException(
+            status_code=400,
+            detail="В GTIN/EAN должны быть только цифры (допускаются пробелы между группами).",
+        )
+    if len(digits) not in (8, 12, 13, 14):
+        raise HTTPException(
+            status_code=400,
+            detail="GTIN/EAN должен содержать ровно 8, 12, 13 или 14 цифр. Оставьте поле пустым, если штрихкод не нужен.",
+        )
+    return digits
+
+
 def _apply_product_filters(
     query,
     db: Session,
@@ -245,6 +266,11 @@ def get_product_filters_meta(
         search=search,
     )
     min_price, max_price = base_query.with_entities(func.min(Product.price), func.max(Product.price)).first() or (0, 0)
+    min_i = int(min_price or 0)
+    max_i = int(max_price or 0)
+    # Один товар даёт min == max; Radix Slider и разметка фильтра ожидают max > min.
+    if max_i <= min_i:
+        max_i = min_i + 1000
     brand_rows = (
         base_query.with_entities(Product.brand)
         .filter(Product.brand.isnot(None), Product.brand != "")
@@ -256,8 +282,8 @@ def get_product_filters_meta(
         data={
             "brands": [row[0] for row in brand_rows],
             "priceRange": {
-                "min": int(min_price or 0),
-                "max": int(max_price or 0),
+                "min": min_i,
+                "max": max_i,
             },
         }
     )
@@ -419,8 +445,8 @@ def create_product(payload: ProductBase, db: Session = Depends(get_db)):
     rating_mode = _validate_rating_mode(payload.ratingMode)
 
     stock_status = _validate_stock_status(payload.stockStatus)
-    if payload.gtin and (not payload.gtin.isdigit() or len(payload.gtin) not in {8, 12, 13, 14}):
-        raise HTTPException(status_code=400, detail="GTIN must contain 8, 12, 13 or 14 digits")
+    gtin_normalized = _normalize_gtin(payload.gtin)
+
     clean_specs = {key: value for key, value in (payload.specs or {}).items() if key != "images"}
 
     product = Product(
@@ -433,7 +459,7 @@ def create_product(payload: ProductBase, db: Session = Depends(get_db)):
         category_id=payload.categoryId,
         brand=_normalize_brand(payload.brand),
         sku=(payload.sku or "").strip() or None,
-        gtin=(payload.gtin or "").strip() or None,
+        gtin=gtin_normalized,
         specs=clean_specs,
         in_stock=stock_status in {"in_stock", "low_stock"},
         stock_status=stock_status,
@@ -590,10 +616,7 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
     if payload.sku is not None:
         product.sku = (payload.sku or "").strip() or None
     if payload.gtin is not None:
-        gtin = (payload.gtin or "").strip()
-        if gtin and (not gtin.isdigit() or len(gtin) not in {8, 12, 13, 14}):
-            raise HTTPException(status_code=400, detail="GTIN must contain 8, 12, 13 or 14 digits")
-        product.gtin = gtin or None
+        product.gtin = _normalize_gtin(payload.gtin)
     if payload.specs is not None:
         existing_images = (product.specs or {}).get("images", [])
         clean_specs = {key: value for key, value in payload.specs.items() if key != "images"}
