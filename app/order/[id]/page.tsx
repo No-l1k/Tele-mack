@@ -12,8 +12,10 @@ import {
   formatOrderStatus,
   formatPaymentMethod,
 } from '@/lib/formatters'
-import { ordersApi } from '@/lib/api'
+import { fetchPublicOrder } from '@/lib/server-store'
 import { notFound } from 'next/navigation'
+
+export const dynamic = 'force-dynamic'
 
 interface OrderPageProps {
   params: Promise<{ id: string }>
@@ -23,8 +25,7 @@ interface OrderPageProps {
 export default async function OrderPage({ params, searchParams }: OrderPageProps) {
   const { id } = await params
   const { token } = await searchParams
-  const orderResponse = token ? await ordersApi.getPublicById(id, token).catch(() => null) : null
-  const order = orderResponse?.data
+  const order = token ? await fetchPublicOrder(id, token) : null
 
   if (!order) {
     notFound()

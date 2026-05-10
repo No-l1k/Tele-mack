@@ -48,22 +48,9 @@ export function resolveMediaUrl(path: string | undefined | null): string {
     return '/placeholder.svg'
   }
   if (path.startsWith('http://') || path.startsWith('https://')) {
-    try {
-      const parsed = new URL(path)
-      if (parsed.pathname.startsWith('/uploads/banners/')) {
-        parsed.pathname = `/uploads/hero/${parsed.pathname.slice('/uploads/banners/'.length)}`
-        return parsed.toString()
-      }
-    } catch {
-      /* ignore */
-    }
     return path
   }
-  let normalized = path.startsWith('/') ? path : `/${path}`
-  // Старые файлы шли в /uploads/banners/ — адблокеры режут URL с «banner». Новый каталог: /uploads/hero/
-  if (normalized.startsWith('/uploads/banners/')) {
-    normalized = `/uploads/hero/${normalized.slice('/uploads/banners/'.length)}`
-  }
+  const normalized = path.startsWith('/') ? path : `/${path}`
   // Статика Next из public (не с API)
   if (normalized.startsWith('/') && !normalized.startsWith('/uploads')) {
     return normalized
