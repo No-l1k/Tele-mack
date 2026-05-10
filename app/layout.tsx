@@ -78,6 +78,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const enableVercelAnalytics = process.env.NEXT_PUBLIC_ENABLE_VERCEL_ANALYTICS === 'true'
   return (
     <html lang="ru" data-scroll-behavior="smooth" className={`${inter.variable} ${geistMono.variable} bg-background`}>
       <body className="font-sans antialiased min-h-screen flex flex-col">
@@ -90,7 +91,7 @@ export default function RootLayout({
             </FavoritesProvider>
           </CartProvider>
         </AuthProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {process.env.NODE_ENV === 'production' && enableVercelAnalytics && <Analytics />}
       </body>
     </html>
   )

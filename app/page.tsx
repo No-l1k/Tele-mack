@@ -40,9 +40,9 @@ const features = [
 
 export default async function HomePage() {
   const [categories, newProducts, brands] = await Promise.all([
-    getCategoryTree(),
-    getNewProducts(),
-    getBrands(12),
+    getCategoryTree().catch(() => []),
+    getNewProducts().catch(() => []),
+    getBrands(12).catch(() => []),
   ])
   const rootCategories = categories.filter((category) => !category.parentId && category.showOnHome)
 
