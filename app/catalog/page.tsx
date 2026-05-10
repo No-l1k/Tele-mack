@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: 'Каталог товаров',
   description: 'Полный каталог телевизоров, кронштейнов, саундбаров и аксессуаров. Выгодные цены, доставка по Москве.',
 }
+export const dynamic = 'force-dynamic'
 
 export default async function CatalogPage() {
   const pageSize = 30
