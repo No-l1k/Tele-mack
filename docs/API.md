@@ -479,7 +479,7 @@ Authorization: Bearer <token>
     "workingHours": "Пн-Вс: 9:00-21:00",
     "deliveryInfo": {
       "moscowFree": true,
-      "moscowMinSum": 1,
+      "moscowMinSum": 4000,
       "regionCostPerKm": 50,
       "deliveryDays": "1-3 дня"
     },

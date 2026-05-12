@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Heart, ShoppingCart, Truck, Shield, CheckCircle, BarChart3 } from 'lucide-react'
+import { Heart, ShoppingCart, Truck, CheckCircle, BarChart3 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Breadcrumbs } from '@/components/ui/breadcrumbs'
@@ -29,6 +29,7 @@ import { formatPrice, formatReviewsCount, calculateDiscount, formatDate } from '
 import { resolveMediaUrl } from '@/lib/media'
 import { cn } from '@/lib/utils'
 import { isCompleteRuPhone } from '@/lib/phone'
+import { prepareDescriptionHtml, sanitizeDescriptionHtml } from '@/lib/rich-text'
 import { Input } from '@/components/ui/input'
 import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
@@ -107,6 +108,26 @@ export default function ProductPage() {
 
   const { addItem, isInCart } = useCart()
   const { toggleFavorite, isFavorite } = useFavorites()
+  const safeDescriptionHtml = useMemo(
+    () => {
+      const sanitized = sanitizeDescriptionHtml(prepareDescriptionHtml(product?.description || ''))
+      if (!sanitized || typeof window === 'undefined') return sanitized
+
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(`<div>${sanitized}</div>`, 'text/html')
+      const root = doc.body.firstElementChild
+      if (!root) return sanitized
+
+      root.querySelectorAll('img').forEach((img) => {
+        const src = img.getAttribute('src')
+        if (!src) return
+        img.setAttribute('src', resolveMediaUrl(src))
+      })
+
+      return root.innerHTML
+    },
+    [product?.description],
+  )
 
   if (isLoading) {
     return (
@@ -430,20 +451,11 @@ export default function ProductPage() {
               </Dialog>
 
               {/* Features */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
-                <div className="flex items-start gap-3">
-                  <Truck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-sm">Доставка по фиксированному тарифу</div>
-                    <div className="text-xs text-muted-foreground">1 000 руб по Москве и МО, за МКАД +50 руб/км</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Shield className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-sm">Гарантия</div>
-                    <div className="text-xs text-muted-foreground">Официальная от производителя</div>
-                  </div>
+              <div className="flex items-start gap-3 pt-4 border-t">
+                <Truck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-medium text-sm">Доставка по фиксированному тарифу</div>
+                  <div className="text-xs text-muted-foreground">1 000 руб по Москве и МО, за МКАД +50 руб/км</div>
                 </div>
               </div>
             </div>
@@ -473,8 +485,18 @@ export default function ProductPage() {
             </TabsList>
 
             <TabsContent value="description" className="mt-6">
-              <div className="prose prose-sm max-w-none">
-                <p>{product.description}</p>
+              <div
+                className={cn(
+                  'prose prose-sm max-w-none text-sm leading-6',
+                  '[&_section]:max-w-[820px] [&_section]:my-3 sm:[&_section]:my-4',
+                  '[&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-lg sm:[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-snug',
+                  '[&_p]:my-2 [&_p]:leading-6',
+                  '[&_figure]:max-w-[820px] [&_figure]:my-3 sm:[&_figure]:my-4 [&_figure]:overflow-hidden [&_figure]:rounded-md [&_figure]:bg-muted/20',
+                  '[&_img]:block [&_img]:w-full [&_img]:h-auto [&_img]:max-h-[220px] sm:[&_img]:max-h-[320px] lg:[&_img]:max-h-[380px] [&_img]:object-contain',
+                  '[&_ul]:my-2 [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:pl-5',
+                )}
+              >
+                <div dangerouslySetInnerHTML={{ __html: safeDescriptionHtml }} />
               </div>
             </TabsContent>
 

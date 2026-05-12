@@ -59,7 +59,7 @@ export function HeroSection() {
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-muted/50 to-background">
       <div className="container mx-auto px-4 py-4 md:py-8">
-        <div className="relative rounded-xl md:rounded-2xl overflow-hidden bg-foreground/5 aspect-[16/10] sm:aspect-[21/9] md:aspect-[3/1]">
+        <div className="relative mx-auto w-full max-w-full lg:max-w-5xl xl:max-w-6xl 2xl:max-w-[1200px] rounded-xl md:rounded-2xl overflow-hidden bg-foreground/5 aspect-[16/10] sm:aspect-[21/9] md:aspect-[3/1]">
           {slides.length === 0 ? (
             <div
               className="absolute inset-0 bg-muted"
@@ -82,7 +82,7 @@ export function HeroSection() {
                         src={slide.image}
                         alt={`Баннер ${index + 1}`}
                         fill
-                        sizes="100vw"
+                        sizes="(max-width: 1024px) 100vw, min(1200px, 85vw)"
                         className="object-cover"
                         priority={index === 0}
                         unoptimized
@@ -94,7 +94,7 @@ export function HeroSection() {
                         src={slide.image}
                         alt={`Баннер ${index + 1}`}
                         fill
-                        sizes="100vw"
+                        sizes="(max-width: 1024px) 100vw, min(1200px, 85vw)"
                         className="object-cover"
                         priority={index === 0}
                         unoptimized

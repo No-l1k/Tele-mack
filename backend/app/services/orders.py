@@ -1,4 +1,5 @@
 from ..models import Order, OrderItem
+from ..pricing_constants import COURIER_DELIVERY_COST_RUB
 
 PIXEL_CHECK_COST = 1500
 INSTALLATION_COST = 3000
@@ -38,7 +39,25 @@ def order_to_dict(order: Order) -> dict:
         if order.installation:
             services_total += INSTALLATION_COST
     payment_surcharge = int(subtotal * 0.15) if order.payment_method == "card" else 0
-    delivery_cost = max(order.total - subtotal - payment_surcharge - services_total, 0)
+    components = subtotal + payment_surcharge + services_total
+    inferred_delivery = order.total - components
+
+    # Доставка не хранится отдельным полем: выводим из остатка total. Если total не включал
+    # тариф курьера (старые заказы «в 1 клик» и пр.), остаток 0 — подставляем фикс МСК/МО.
+    if order.delivery_method == "courier":
+        if inferred_delivery >= COURIER_DELIVERY_COST_RUB:
+            delivery_cost = inferred_delivery
+        elif inferred_delivery <= 0:
+            delivery_cost = COURIER_DELIVERY_COST_RUB
+        else:
+            delivery_cost = max(inferred_delivery, 0)
+    else:
+        delivery_cost = max(inferred_delivery, 0)
+
+    computed_total = components + delivery_cost
+    # Для курьера: если в БД сумма без доставки — в ответе показываем согласованный итог с тарифом
+    total_out = computed_total if order.delivery_method == "courier" and inferred_delivery <= 0 else order.total
+
     return {
         "id": order.id,
         "number": order.id,
@@ -47,7 +66,7 @@ def order_to_dict(order: Order) -> dict:
         "subtotal": subtotal,
         "deliveryCost": delivery_cost,
         "paymentSurcharge": payment_surcharge,
-        "total": order.total,
+        "total": total_out,
         "deliveryMethod": order.delivery_method,
         "paymentMethod": order.payment_method,
         "paymentStatus": order.payment_status,

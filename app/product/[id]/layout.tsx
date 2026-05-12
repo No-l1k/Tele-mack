@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { getProductByIdOrSlug } from '@/lib/data/catalog'
 import { resolveMediaUrl } from '@/lib/media'
+import { htmlToText } from '@/lib/rich-text'
 import { siteConfig } from '@/lib/site'
 
 type ProductLayoutProps = {
@@ -30,6 +31,7 @@ export async function generateMetadata({
   }
 
   const canonical = `/product/${product.slug}`
+  const descriptionText = htmlToText(product.metaDescription || product.shortDescription || product.description || '')
   const rawImage = product.images[0]
   const resolved = rawImage ? resolveMediaUrl(rawImage) : ''
   const ogImageUrl =
@@ -40,7 +42,7 @@ export async function generateMetadata({
 
   return {
     title: product.metaTitle || product.name,
-    description: product.metaDescription || product.shortDescription || product.description,
+    description: descriptionText,
     alternates: {
       canonical,
     },
@@ -48,7 +50,7 @@ export async function generateMetadata({
       type: 'website',
       url: `${siteConfig.url}${canonical}`,
       title: product.metaTitle || product.name,
-      description: product.metaDescription || product.shortDescription || product.description,
+      description: descriptionText,
       images: ogImageUrl ? [{ url: ogImageUrl, alt: product.name }] : undefined,
     },
   }

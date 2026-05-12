@@ -25,6 +25,7 @@ import { formatPrice } from '@/lib/formatters'
 import { productsApi } from '@/lib/api'
 import { resolveMediaUrl } from '@/lib/media'
 import type { Product } from '@/types'
+import { toast } from 'sonner'
 import { 
   Plus, 
   Search, 
@@ -68,12 +69,13 @@ export default function AdminProductsPage() {
   )
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Удалить товар?')) return
+    if (!confirm('Это уберёт товар из каталога. Продолжить?')) return
     try {
       await productsApi.delete(id)
+      toast.success('Товар удалён из каталога')
       await loadProducts(1, true)
-    } catch (error: any) {
-      alert(error?.message || 'Не удалось удалить товар')
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось удалить товар')
     }
   }
 
@@ -88,7 +90,7 @@ export default function AdminProductsPage() {
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to export products', error)
-      alert('Не удалось выгрузить CSV')
+      toast.error('Не удалось выгрузить CSV')
     }
   }
 

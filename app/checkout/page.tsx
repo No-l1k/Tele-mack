@@ -23,6 +23,7 @@ import { resolveMediaUrl } from '@/lib/media'
 import { CARD_SURCHARGE_RATE, calculateDeliveryCost } from '@/lib/pricing'
 import { saveOrderAccess } from '@/lib/order-access'
 import { isCompleteRuPhone } from '@/lib/phone'
+import { DEFAULT_MIN_ORDER_AMOUNT_RUB } from '@/lib/constants'
 import type { DeliveryMethod, PaymentMethod } from '@/types'
 
 export default function CheckoutPage() {
@@ -49,6 +50,7 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [checkoutServices, setCheckoutServices] = useState<CheckoutService[]>([])
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
+  const [minOrderSum, setMinOrderSum] = useState(DEFAULT_MIN_ORDER_AMOUNT_RUB)
 
   useEffect(() => {
     let cancelled = false
@@ -59,12 +61,17 @@ export default function CheckoutPage() {
         const enabled = allServices
           .filter((service) => service && service.enabled)
           .sort((a, b) => a.sortOrder - b.sortOrder)
+        const rawMin = response.data.deliveryInfo?.moscowMinSum
+        const nextMin =
+          typeof rawMin === 'number' && rawMin > 0 ? rawMin : DEFAULT_MIN_ORDER_AMOUNT_RUB
         if (!cancelled) {
           setCheckoutServices(enabled)
+          setMinOrderSum(nextMin)
         }
       } catch {
         if (!cancelled) {
           setCheckoutServices([])
+          setMinOrderSum(DEFAULT_MIN_ORDER_AMOUNT_RUB)
         }
       }
     })()
@@ -96,6 +103,9 @@ export default function CheckoutPage() {
     }
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Неверный формат email'
+    }
+    if (total < minOrderSum) {
+      newErrors.form = `Минимальная сумма заказа ${formatPrice(minOrderSum)}. Сейчас в корзине ${formatPrice(total)}.`
     }
     if (formData.deliveryMethod === 'courier') {
       if (!formData.street.trim()) {
@@ -309,7 +319,7 @@ export default function CheckoutPage() {
                             Стоимость курьерской доставки по Москве и МО - 1 000 руб. За пределами МКАД дополнительно оплачивается 50 руб/км. Для отправки по России действует 100% предоплата после расчета стоимости транспортной компанией.
                           </p>
                           <p className="text-sm text-primary mt-1">
-                            Минимальная сумма заказа - 1 руб
+                            Минимальная сумма заказа — {formatPrice(minOrderSum)}
                           </p>
                         </div>
                         <div className="font-medium">+ 1 000 руб</div>

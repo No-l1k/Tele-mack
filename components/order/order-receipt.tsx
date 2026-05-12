@@ -23,7 +23,7 @@ function deliveryNotes(order: Order, settings: StoreSettings | null): string {
   const lines: string[] = []
   if (order.deliveryMethod === 'courier') {
     lines.push(
-      'Доставка по Москве и МО — согласно условиям магазина. За МКАД возможна доплата за километраж.'
+      'Доставка по Москве и МО — согласно условиям магазина. За МКАД — доплата 50 руб./км.'
     )
     if (settings?.deliveryInfo?.deliveryDays) {
       lines.push(settings.deliveryInfo.deliveryDays)

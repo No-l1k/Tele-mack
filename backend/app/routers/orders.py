@@ -16,13 +16,15 @@ from ..models import Order, OrderItem, Product, Setting, User
 from ..schemas import ApiResponse, OrderCreate, OrderPublicLookupIn, OrderStatusUpdate
 from ..services.notifications import email_notifications_enabled, send_new_order_email
 from ..services.orders import order_to_dict
+from ..services.store_settings import min_order_subtotal_rub
+from ..pricing_constants import COURIER_DELIVERY_COST_RUB
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 logger = logging.getLogger(__name__)
 ALLOWED_ORDER_STATUSES = {"pending", "confirmed", "processing", "shipped", "delivered", "cancelled"}
 ALLOWED_PAYMENT_METHODS = {"cash", "card", "pickup"}
 ALLOWED_DELIVERY_METHODS = {"courier", "pickup"}
-COURIER_DELIVERY_COST = 1000
+COURIER_DELIVERY_COST = COURIER_DELIVERY_COST_RUB
 DEFAULT_CHECKOUT_SERVICES = [
     {"id": "pixel-check", "name": "Проверка на битые пиксели", "price": 1500, "enabled": True},
     {"id": "installation", "name": "Установка телевизора", "price": 3000, "enabled": True},
@@ -103,7 +105,7 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
     if payload.deliveryMethod not in ALLOWED_DELIVERY_METHODS:
         raise HTTPException(status_code=400, detail="Invalid delivery method")
     subtotal = 0
-    order_items: list[OrderItem] = []
+    lines: list[tuple[Product, int, int, int]] = []
     for item in payload.items:
         quantity = item.quantity
         product = db.query(Product).filter(Product.id == item.productId).with_for_update().first()
@@ -115,7 +117,17 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         price = int(product.price)
         line_total = quantity * price
         subtotal += line_total
+        lines.append((product, quantity, price, line_total))
 
+    min_sum = min_order_subtotal_rub(db)
+    if subtotal < min_sum:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Минимальная сумма заказа {min_sum} руб. (сейчас товаров на {subtotal} руб.)",
+        )
+
+    order_items: list[OrderItem] = []
+    for product, quantity, price, line_total in lines:
         product.quantity -= quantity
         if product.quantity <= 0:
             product.quantity = 0

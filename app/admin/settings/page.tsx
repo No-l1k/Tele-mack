@@ -19,7 +19,7 @@ const initialState: StoreSettings = {
   workingHours: '',
   deliveryInfo: {
     moscowFree: true,
-    moscowMinSum: 1,
+    moscowMinSum: 4000,
     regionCostPerKm: 50,
     deliveryDays: '',
   },

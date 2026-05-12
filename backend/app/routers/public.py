@@ -7,6 +7,8 @@ from ..database import get_db
 from ..models import Order, OrderItem, Product, Setting
 from ..schemas import ApiResponse, ContactRequestIn, QuickOrderCreateIn
 from ..services.notifications import email_notifications_enabled, send_contact_request_email, send_new_order_email
+from ..services.store_settings import min_order_subtotal_rub
+from ..pricing_constants import COURIER_DELIVERY_COST_RUB
 
 router = APIRouter(prefix="/public", tags=["public"])
 logger = logging.getLogger(__name__)
@@ -17,7 +19,7 @@ DEFAULT_STORE_SETTINGS = {
     "email": "shop@example.com",
     "address": "Москва",
     "workingHours": "Пн-Вс: 9:00-21:00",
-    "deliveryInfo": {"moscowFree": True, "moscowMinSum": 1, "regionCostPerKm": 50, "deliveryDays": "1-3 дня"},
+    "deliveryInfo": {"moscowFree": True, "moscowMinSum": 4000, "regionCostPerKm": 50, "deliveryDays": "1-3 дня"},
     "paymentMethods": {"cash": True, "card": True, "cardSurcharge": 15, "pickup": True},
     "social": {"whatsapp": "+79000000000", "telegram": "@telemakc"},
     "heroBanners": [],
@@ -165,6 +167,12 @@ def create_quick_order(payload: QuickOrderCreateIn, db: Session = Depends(get_db
 
     quantity = payload.quantity
     line_total = int(product.price) * quantity
+    min_sum = min_order_subtotal_rub(db)
+    if line_total < min_sum:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Минимальная сумма заказа {min_sum} руб.",
+        )
     product.quantity -= quantity
     if product.quantity <= 0:
         product.quantity = 0
@@ -176,7 +184,7 @@ def create_quick_order(payload: QuickOrderCreateIn, db: Session = Depends(get_db
 
     order = Order(
         status="pending",
-        total=line_total,
+        total=line_total + COURIER_DELIVERY_COST_RUB,
         payment_status="pending",
         delivery_method="courier",
         payment_method="cash",

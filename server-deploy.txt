@@ -1,0 +1,5 @@
+# Деплой на VPS (SSH). Путь /opt/rassel_shop замени, если проект в другом каталоге.
+
+cd /opt/rassel_shop
+git pull
+docker compose --env-file .env.server -f docker-compose.server.yml up -d --build

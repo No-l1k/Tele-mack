@@ -252,13 +252,12 @@ export default function ContactsPage() {
             <CardHeader>
               <CardTitle>Как нас найти</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-hidden rounded-lg border">
+            <CardContent className="min-w-0">
+              {/* min-w-0 + max-w-full у iframe: иначе виджет Яндекса может задать min-width и вынести страницу за край экрана */}
+              <div className="relative w-full min-w-0 max-w-full overflow-hidden rounded-lg border">
                 <iframe
                   src="https://yandex.ru/map-widget/v1/?um=constructor%3A32c58273987773c9dc294bbd7649830bbc12dd09da0cafa4be5a8af8866eb7ca&source=constructor"
-                  width="100%"
-                  height="520"
-                  frameBorder="0"
+                  className="block h-[min(520px,65vh)] w-full max-w-full min-w-0 border-0 sm:h-[520px]"
                   loading="lazy"
                   title="Карта расположения магазина"
                 />

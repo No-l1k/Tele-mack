@@ -4,14 +4,24 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { categoriesApi, productsApi } from '@/lib/api'
 import type { Category, Product } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import { DescriptionBlocksEditor } from '@/components/admin/description-blocks-editor'
 import { resolveMediaUrl } from '@/lib/media'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
+import { normalizeProductSlug, normalizeProductSlugInput } from '@/lib/admin-slug'
+import { htmlToText } from '@/lib/rich-text'
 
 type SpecRow = {
   id: string
@@ -39,6 +49,9 @@ export default function EditProductPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '' }])
   const [ratingMode, setRatingMode] = useState<'manual' | 'auto'>('manual')
+  const [descriptionHtml, setDescriptionHtml] = useState('')
+  const [slug, setSlug] = useState('')
+  const [additionalOpen, setAdditionalOpen] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -47,6 +60,8 @@ export default function EditProductPage() {
       setProduct(loadedProduct)
       if (loadedProduct) {
         setRatingMode((loadedProduct.ratingMode || 'manual') as 'manual' | 'auto')
+        setDescriptionHtml(loadedProduct.description || '')
+        setSlug(loadedProduct.slug || '')
         const rows = Object.entries(loadedProduct.specs || {})
           .filter(([key]) => key !== 'images')
           .map(([key, value], idx) => ({
@@ -75,7 +90,7 @@ export default function EditProductPage() {
       if (fileInputRef.current) fileInputRef.current.value = ''
       await reloadProduct()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Ошибка загрузки файлов')
+      toast.error(err instanceof Error ? err.message : 'Ошибка загрузки файлов')
     } finally {
       setPhotoBusy(false)
     }
@@ -92,7 +107,7 @@ export default function EditProductPage() {
       await productsApi.reorderImages(String(product.id), urls)
       await reloadProduct()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Не удалось изменить порядок')
+      toast.error(err instanceof Error ? err.message : 'Не удалось изменить порядок')
     } finally {
       setPhotoBusy(false)
     }
@@ -106,7 +121,7 @@ export default function EditProductPage() {
       await productsApi.deleteImage(String(product.id), url)
       await reloadProduct()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Не удалось удалить фото')
+      toast.error(err instanceof Error ? err.message : 'Не удалось удалить фото')
     } finally {
       setPhotoBusy(false)
     }
@@ -115,6 +130,15 @@ export default function EditProductPage() {
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!product) return
+    if (!htmlToText(descriptionHtml)) {
+      toast.error('Заполните описание товара')
+      return
+    }
+    const normalizedSlug = normalizeProductSlug(slug)
+    if (!normalizedSlug) {
+      toast.error('Укажите ссылку на товар: латиница и дефисы, например canon-eos-r6')
+      return
+    }
     setIsSaving(true)
     const payload = new FormData(event.currentTarget)
     try {
@@ -126,8 +150,8 @@ export default function EditProductPage() {
       )
       await productsApi.update(product.id, {
         name: String(payload.get('name') || product.name),
-        slug: String(payload.get('slug') || product.slug),
-        description: String(payload.get('description') || product.description),
+        slug: normalizedSlug,
+        description: String(payload.get('description') || descriptionHtml || product.description),
         shortDescription: String(payload.get('shortDescription') || product.shortDescription || ''),
         brand: normalizeBrand(String(payload.get('brand') || product.brand)),
         price: Number(payload.get('price') || product.price),
@@ -154,12 +178,30 @@ export default function EditProductPage() {
         metaTitle: String(payload.get('metaTitle') || product.metaTitle || '').trim() || undefined,
         metaDescription: String(payload.get('metaDescription') || product.metaDescription || '').trim() || undefined,
       })
+      toast.success('Товар сохранён')
       router.push('/admin/products')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Не удалось сохранить товар')
+      toast.error(err instanceof Error ? err.message : 'Не удалось сохранить товар')
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleUploadDescriptionImage = async (file: File): Promise<string> => {
+    if (!product) throw new Error('Сначала сохраните товар')
+    const response = await productsApi.uploadImages(String(product.id), [file])
+    const uploadedUrl = response.data?.[0]
+    if (!uploadedUrl) {
+      throw new Error('Не удалось загрузить изображение')
+    }
+    await reloadProduct()
+    return uploadedUrl
+  }
+
+  const handleDeleteDescriptionImage = async (url: string): Promise<void> => {
+    if (!product) return
+    await productsApi.deleteImage(String(product.id), url)
+    await reloadProduct()
   }
 
   if (isLoading) return <p className="text-muted-foreground">Загрузка...</p>
@@ -182,7 +224,43 @@ export default function EditProductPage() {
       <div className="flex items-center gap-4"><Link href="/admin/products"><Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button></Link><h1 className="text-2xl font-bold">Редактирование товара</h1></div>
       <form onSubmit={handleSave} className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <Card><CardHeader><CardTitle>Основная информация</CardTitle></CardHeader><CardContent className="space-y-4"><Input name="name" defaultValue={product.name} required /><Input name="slug" defaultValue={product.slug} required /><Textarea name="shortDescription" defaultValue={product.shortDescription} /><Textarea name="description" defaultValue={product.description} rows={5} required /><div className="grid gap-4 sm:grid-cols-2"><Input name="brand" defaultValue={product.brand} /><select name="categoryId" className="w-full rounded-md border bg-background px-3 py-2 text-sm" defaultValue={product.categoryId}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div></CardContent></Card>
+          <Card>
+            <CardHeader><CardTitle>Основная информация</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <Input name="name" defaultValue={product.name} required />
+              <div className="space-y-2">
+                <Label htmlFor="product-slug-edit">Ссылка на товар</Label>
+                <Input
+                  id="product-slug-edit"
+                  name="slug"
+                  placeholder="canon-eos-r6-mark-iii"
+                  required
+                  autoComplete="off"
+                  value={slug}
+                  onChange={(event) => setSlug(normalizeProductSlugInput(event.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Латиница и дефисы, например <span className="font-mono">canon-eos-r6</span>.
+                </p>
+              </div>
+              <Textarea name="shortDescription" defaultValue={product.shortDescription} />
+              <input type="hidden" name="description" value={descriptionHtml} />
+              <DescriptionBlocksEditor
+                value={descriptionHtml}
+                onChange={setDescriptionHtml}
+                onUploadImageFile={handleUploadDescriptionImage}
+                onDeleteImageFile={handleDeleteDescriptionImage}
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input name="brand" defaultValue={product.brand} />
+                <select name="categoryId" className="w-full rounded-md border bg-background px-3 py-2 text-sm" defaultValue={product.categoryId}>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Характеристики</CardTitle>
@@ -251,12 +329,31 @@ export default function EditProductPage() {
                 <option value="out_of_stock">Нет в наличии</option>
               </select>
               <Input name="sku" placeholder="SKU / артикул" defaultValue={product.sku} />
-              <Input name="gtin" placeholder="GTIN / EAN (8/12/13/14 цифр)" defaultValue={product.gtin} />
               <Input type="number" name="warrantyMonths" placeholder="Гарантия, мес" min={0} step={1} defaultValue={product.warrantyMonths} />
               <Input name="warrantyType" placeholder="Тип гарантии (например, официальная)" defaultValue={product.warrantyType} />
               <Textarea name="serviceInfo" placeholder="Сервисные условия / сервисный центр" rows={3} defaultValue={product.serviceInfo} />
-              <Input name="metaTitle" placeholder="Meta title" maxLength={255} defaultValue={product.metaTitle} />
-              <Textarea name="metaDescription" placeholder="Meta description" rows={3} maxLength={500} defaultValue={product.metaDescription} />
+              <Collapsible open={additionalOpen} onOpenChange={setAdditionalOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="outline" className="w-full justify-between">
+                    Дополнительно (необязательно)
+                    <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${additionalOpen ? 'rotate-180' : ''}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gtin-edit">Штрихкод GTIN / EAN</Label>
+                    <Input id="gtin-edit" name="gtin" placeholder="Необязательно, 8–14 цифр" defaultValue={product.gtin} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="meta-title-edit">Заголовок для поиска (meta title)</Label>
+                    <Input id="meta-title-edit" name="metaTitle" placeholder="Необязательно" maxLength={255} defaultValue={product.metaTitle} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="meta-desc-edit">Краткое описание для поиска</Label>
+                    <Textarea id="meta-desc-edit" name="metaDescription" placeholder="Необязательно" rows={3} maxLength={500} defaultValue={product.metaDescription} />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="isNew" defaultChecked={product.isNew} />
                 Новинка
@@ -358,7 +455,18 @@ export default function EditProductPage() {
             variant="destructive"
             className="w-full"
             disabled={photoBusy}
-            onClick={() => productsApi.delete(product.id).then(() => router.push('/admin/products'))}
+            onClick={() => {
+              if (!confirm('Это уберёт товар из каталога. Продолжить?')) return
+              productsApi
+                .delete(product.id)
+                .then(() => {
+                  toast.success('Товар удалён из каталога')
+                  router.push('/admin/products')
+                })
+                .catch((err: unknown) => {
+                  toast.error(err instanceof Error ? err.message : 'Не удалось удалить товар')
+                })
+            }}
           >
             Удалить товар
           </Button>

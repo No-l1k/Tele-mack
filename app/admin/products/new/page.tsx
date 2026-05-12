@@ -1,16 +1,30 @@
 ﻿'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { categoriesApi, productsApi } from '@/lib/api'
 import type { Category } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
+  DescriptionBlocksEditor,
+  type DescriptionBlocksEditorHandle,
+} from '@/components/admin/description-blocks-editor'
+import { injectUploadedImageUrls } from '@/lib/description-blocks'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
+import { normalizeProductSlug, normalizeProductSlugInput } from '@/lib/admin-slug'
+import { htmlToText } from '@/lib/rich-text'
 
 type SpecRow = {
   id: string
@@ -28,11 +42,17 @@ const normalizeBrand = (value: string) =>
 export default function NewProductPage() {
   const router = useRouter()
   const [categories, setCategories] = useState<Category[]>([])
+  const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [slugTouched, setSlugTouched] = useState(false)
   const [categoryId, setCategoryId] = useState('')
   const [images, setImages] = useState<File[]>([])
+  const [descriptionHtml, setDescriptionHtml] = useState('')
   const [ratingMode, setRatingMode] = useState<'manual' | 'auto'>('manual')
   const [isLoading, setIsLoading] = useState(false)
   const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '' }])
+  const [additionalOpen, setAdditionalOpen] = useState(false)
+  const descriptionEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -43,6 +63,15 @@ export default function NewProductPage() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!htmlToText(descriptionHtml)) {
+      toast.error('Заполните описание товара')
+      return
+    }
+    const normalizedSlug = normalizeProductSlug(slug)
+    if (!normalizedSlug) {
+      toast.error('Укажите ссылку на товар: латиница и дефисы, например canon-eos-r6')
+      return
+    }
     setIsLoading(true)
     const payload = new FormData(event.currentTarget)
     const specs = Object.fromEntries(
@@ -53,8 +82,8 @@ export default function NewProductPage() {
     try {
       const response = await productsApi.create({
         name: String(payload.get('name') || ''),
-        slug: String(payload.get('slug') || ''),
-        description: String(payload.get('description') || ''),
+        slug: normalizedSlug,
+        description: String(payload.get('description') || descriptionHtml),
         shortDescription: String(payload.get('shortDescription') || ''),
         price: Number(payload.get('price') || 0),
         oldPrice: payload.get('oldPrice') ? Number(payload.get('oldPrice')) : undefined,
@@ -78,10 +107,27 @@ export default function NewProductPage() {
         metaDescription: String(payload.get('metaDescription') || '').trim() || undefined,
         images: [],
       })
-      if (images.length > 0) {
-        await productsApi.uploadImages(response.data.id, images)
+      const productId = String(response.data.id)
+      let finalDescription = String(payload.get('description') || descriptionHtml)
+      const pendingImages = descriptionEditorRef.current?.getPendingImageFilesByBlockId() ?? {}
+      const pendingEntries = Object.entries(pendingImages).filter(([, file]) => file)
+      if (pendingEntries.length > 0) {
+        const urlsByBlockId: Record<string, string> = {}
+        for (const [blockId, file] of pendingEntries) {
+          const uploaded = await productsApi.uploadImages(productId, [file])
+          const url = uploaded.data?.[0]
+          if (url) urlsByBlockId[blockId] = url
+        }
+        finalDescription = injectUploadedImageUrls(finalDescription, urlsByBlockId)
+        await productsApi.update(productId, { description: finalDescription })
       }
+      if (images.length > 0) {
+        await productsApi.uploadImages(productId, images)
+      }
+      toast.success('Товар сохранён')
       router.push('/admin/products')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Не удалось создать товар')
     } finally {
       setIsLoading(false)
     }
@@ -110,10 +156,44 @@ export default function NewProductPage() {
           <Card>
             <CardHeader><CardTitle>Основная информация</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <Input name="name" placeholder="Название" required />
-              <Input name="slug" placeholder="Slug" required />
+              <Input
+                name="name"
+                placeholder="Название"
+                required
+                value={name}
+                onChange={(event) => {
+                  const nextName = event.target.value
+                  setName(nextName)
+                  if (!slugTouched) {
+                    setSlug(normalizeProductSlugInput(nextName))
+                  }
+                }}
+              />
+              <div className="space-y-2">
+                <Label htmlFor="product-slug">Ссылка на товар</Label>
+                <Input
+                  id="product-slug"
+                  name="slug"
+                  placeholder="canon-eos-r6-mark-iii"
+                  required
+                  autoComplete="off"
+                  value={slug}
+                  onChange={(event) => {
+                    setSlugTouched(true)
+                    setSlug(normalizeProductSlugInput(event.target.value))
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Латиница и дефисы, например <span className="font-mono">canon-eos-r6</span>. Заполняется из названия автоматически — можно поправить вручную.
+                </p>
+              </div>
               <Textarea name="shortDescription" placeholder="Короткое описание" />
-              <Textarea name="description" placeholder="Описание" rows={5} required />
+              <input type="hidden" name="description" value={descriptionHtml} />
+              <DescriptionBlocksEditor
+                ref={descriptionEditorRef}
+                value={descriptionHtml}
+                onChange={setDescriptionHtml}
+              />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input name="brand" placeholder="Бренд" />
                 <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>
@@ -188,12 +268,31 @@ export default function NewProductPage() {
                 </p>
               )}
               <Input name="sku" placeholder="SKU / артикул" />
-              <Input name="gtin" placeholder="GTIN / EAN (8/12/13/14 цифр)" />
               <Input type="number" name="warrantyMonths" placeholder="Гарантия, мес" min={0} step={1} />
               <Input name="warrantyType" placeholder="Тип гарантии (например, официальная)" />
               <Textarea name="serviceInfo" placeholder="Сервисные условия / сервисный центр" rows={3} />
-              <Input name="metaTitle" placeholder="Meta title" maxLength={255} />
-              <Textarea name="metaDescription" placeholder="Meta description" rows={3} maxLength={500} />
+              <Collapsible open={additionalOpen} onOpenChange={setAdditionalOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="outline" className="w-full justify-between">
+                    Дополнительно (необязательно)
+                    <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${additionalOpen ? 'rotate-180' : ''}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gtin-new">Штрихкод GTIN / EAN</Label>
+                    <Input id="gtin-new" name="gtin" placeholder="Необязательно, 8–14 цифр" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="meta-title-new">Заголовок для поиска (meta title)</Label>
+                    <Input id="meta-title-new" name="metaTitle" placeholder="Необязательно" maxLength={255} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="meta-desc-new">Краткое описание для поиска</Label>
+                    <Textarea id="meta-desc-new" name="metaDescription" placeholder="Необязательно" rows={3} maxLength={500} />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="isNew" />
                 Новинка
