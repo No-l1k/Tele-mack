@@ -1,11 +1,8 @@
-import csv
 import hashlib
-import io
 import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -14,6 +11,7 @@ from ..config import settings
 from ..deps import get_current_admin, get_current_user
 from ..models import Order, OrderItem, Product, Setting, User
 from ..schemas import ApiResponse, OrderCreate, OrderPublicLookupIn, OrderStatusUpdate
+from ..services.csv_export import excel_csv_response
 from ..services.notifications import email_notifications_enabled, send_new_order_email
 from ..services.orders import order_to_dict
 from ..services.store_settings import min_order_subtotal_rub
@@ -270,24 +268,22 @@ def export_orders(
             query = query.filter(Order.created_at <= datetime.fromisoformat(to_date))
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid to date format") from None
-    def stream_rows():
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-        writer.writerow(["id", "createdAt", "status", "paymentStatus", "customerName", "phone", "total"])
-        yield buffer.getvalue()
-        buffer.seek(0)
-        buffer.truncate(0)
-
+    def order_rows():
         for row in query.order_by(Order.created_at.desc()).yield_per(500):
-            writer.writerow([row.id, row.created_at.isoformat(), row.status, row.payment_status, row.customer_name, row.customer_phone, row.total])
-            yield buffer.getvalue()
-            buffer.seek(0)
-            buffer.truncate(0)
+            yield [
+                row.id,
+                row.created_at.isoformat(),
+                row.status,
+                row.payment_status,
+                row.customer_name,
+                row.customer_phone,
+                row.total,
+            ]
 
-    return StreamingResponse(
-        stream_rows(),
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="orders.csv"'},
+    return excel_csv_response(
+        "orders.csv",
+        ["id", "createdAt", "status", "paymentStatus", "customerName", "phone", "total"],
+        order_rows(),
     )
 
 

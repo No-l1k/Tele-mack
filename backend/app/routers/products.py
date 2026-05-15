@@ -1,11 +1,8 @@
-import csv
-import io
 import re
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
 from sqlalchemy import asc
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -26,6 +23,7 @@ from ..schemas import (
     ProductUpdateIn,
     ReviewCreateIn,
 )
+from ..services.csv_export import excel_csv_response
 from ..services.products import product_to_dict
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -301,34 +299,22 @@ def get_product_by_slug(slug: str, db: Session = Depends(get_db)):
 def export_products(db: Session = Depends(get_db)):
     query = db.query(Product).join(Category, Product.category_id == Category.id, isouter=True).order_by(Product.id.asc())
 
-    def stream_rows():
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-        writer.writerow(["name", "price", "category", "stock", "description", "images"])
-        yield buffer.getvalue()
-        buffer.seek(0)
-        buffer.truncate(0)
-
+    def product_rows():
         for row in query.yield_per(500):
             payload = product_to_dict(row)
-            writer.writerow(
-                [
-                    payload["name"],
-                    payload["price"],
-                    payload.get("categorySlug", ""),
-                    payload["quantity"],
-                    payload["description"],
-                    ",".join(payload.get("images", [])),
-                ]
-            )
-            yield buffer.getvalue()
-            buffer.seek(0)
-            buffer.truncate(0)
+            yield [
+                payload["name"],
+                payload["price"],
+                payload.get("categorySlug", ""),
+                payload["quantity"],
+                payload["description"],
+                "|".join(payload.get("images", [])),
+            ]
 
-    return StreamingResponse(
-        stream_rows(),
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="products.csv"'},
+    return excel_csv_response(
+        "products.csv",
+        ["name", "price", "category", "stock", "description", "images"],
+        product_rows(),
     )
 
 

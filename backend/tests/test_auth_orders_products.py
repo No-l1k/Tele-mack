@@ -80,4 +80,6 @@ def test_products_export_requires_admin_and_returns_csv():
     response = client.get("/api/products/export", headers=headers)
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
-    assert "name,price,category,stock,description,images" in response.text
+    assert response.content.startswith(b"\xef\xbb\xbf")
+    text = response.content.decode("utf-8-sig")
+    assert "name;price;category;stock;description;images" in text
