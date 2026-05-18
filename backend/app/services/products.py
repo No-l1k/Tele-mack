@@ -42,6 +42,7 @@ def product_to_dict(product: Product) -> dict:
         "warrantyMonths": product.warranty_months,
         "warrantyType": product.warranty_type,
         "serviceInfo": product.service_info,
+        "recommendedAccessoryIds": [int(item) for item in (product.recommended_accessory_ids or []) if isinstance(item, int)],
         "metaTitle": product.meta_title,
         "metaDescription": product.meta_description,
         "isNew": product.is_new,

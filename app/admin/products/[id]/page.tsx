@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
+import Image from 'next/image'
+import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { categoriesApi, productsApi } from '@/lib/api'
 import type { Category, Product } from '@/types'
@@ -17,17 +18,15 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { DescriptionBlocksEditor } from '@/components/admin/description-blocks-editor'
+import {
+  DescriptionBlocksEditor,
+  type DescriptionBlocksEditorHandle,
+} from '@/components/admin/description-blocks-editor'
+import { ProductSpecsEditor, type SpecRow } from '@/components/admin/product-specs-editor'
 import { resolveMediaUrl } from '@/lib/media'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
 import { normalizeProductSlug, normalizeProductSlugInput } from '@/lib/admin-slug'
 import { htmlToText } from '@/lib/rich-text'
-
-type SpecRow = {
-  id: string
-  key: string
-  value: string
-}
 
 const normalizeBrand = (value: string) =>
   value
@@ -36,12 +35,30 @@ const normalizeBrand = (value: string) =>
     .map((part) => (part ? part[0].toUpperCase() + part.slice(1).toLowerCase() : part))
     .join(' ')
 
+async function loadCatalogProducts(): Promise<Product[]> {
+  const allProducts: Product[] = []
+  let page = 1
+  let totalPages = 1
+
+  while (page <= totalPages) {
+    const response = await productsApi.getAll(undefined, page, 100)
+    allProducts.push(...response.data)
+    totalPages = response.totalPages || 1
+    page += 1
+  }
+
+  return allProducts
+}
+
 export default function EditProductPage() {
   const params = useParams()
   const router = useRouter()
   const productId = params.id as string
   const [product, setProduct] = useState<Product | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
+  const [recommendedAccessoryIds, setRecommendedAccessoryIds] = useState<string[]>([])
+  const [accessoriesSearch, setAccessoriesSearch] = useState('')
   const [images, setImages] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [photoBusy, setPhotoBusy] = useState(false)
@@ -50,18 +67,29 @@ export default function EditProductPage() {
   const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '' }])
   const [ratingMode, setRatingMode] = useState<'manual' | 'auto'>('manual')
   const [descriptionHtml, setDescriptionHtml] = useState('')
+  const [serviceInfoHtml, setServiceInfoHtml] = useState('')
   const [slug, setSlug] = useState('')
+  const [categoryId, setCategoryId] = useState('')
   const [additionalOpen, setAdditionalOpen] = useState(false)
+  const serviceInfoEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
 
   useEffect(() => {
     ;(async () => {
-      const [productResponse, categoriesResponse] = await Promise.all([productsApi.getById(productId).catch(() => null), categoriesApi.getAll().catch(() => null)])
+      const [productResponse, categoriesResponse, products] = await Promise.all([
+        productsApi.getById(productId).catch(() => null),
+        categoriesApi.getAll().catch(() => null),
+        loadCatalogProducts().catch(() => []),
+      ])
       const loadedProduct = productResponse?.data ?? null
       setProduct(loadedProduct)
+      setCatalogProducts(products.map((item) => ({ ...item, id: String(item.id) })))
       if (loadedProduct) {
         setRatingMode((loadedProduct.ratingMode || 'manual') as 'manual' | 'auto')
         setDescriptionHtml(loadedProduct.description || '')
+        setServiceInfoHtml(loadedProduct.serviceInfo || '')
         setSlug(loadedProduct.slug || '')
+        setCategoryId(String(loadedProduct.categoryId || ''))
+        setRecommendedAccessoryIds((loadedProduct.recommendedAccessoryIds ?? []).map((id) => String(id)))
         const rows = Object.entries(loadedProduct.specs || {})
           .filter(([key]) => key !== 'images')
           .map(([key, value], idx) => ({
@@ -142,7 +170,7 @@ export default function EditProductPage() {
     setIsSaving(true)
     const payload = new FormData(event.currentTarget)
     try {
-      const categoryId = Number(payload.get('categoryId') || product.categoryId)
+      const selectedCategoryId = Number(categoryId || payload.get('categoryId') || product.categoryId)
       const specsFromRows = Object.fromEntries(
         specRows
           .map((row) => [row.key.trim(), row.value.trim()] as const)
@@ -157,9 +185,9 @@ export default function EditProductPage() {
         price: Number(payload.get('price') || product.price),
         oldPrice: payload.get('oldPrice') ? Number(payload.get('oldPrice')) : undefined,
         quantity: Number(payload.get('quantity') || product.quantity),
-        categoryId,
+        categoryId: selectedCategoryId,
         categorySlug:
-          categories.find((category) => Number(category.id) === categoryId)?.slug || product.categorySlug,
+          categories.find((category) => String(category.id) === String(selectedCategoryId))?.slug || product.categorySlug,
         sku: String(payload.get('sku') || product.sku || '').trim() || undefined,
         gtin: String(payload.get('gtin') || product.gtin || '').trim() || undefined,
         specs: {
@@ -174,7 +202,8 @@ export default function EditProductPage() {
         inStock: ['in_stock', 'low_stock'].includes(String(payload.get('stockStatus') || product.stockStatus || 'in_stock')),
         warrantyMonths: payload.get('warrantyMonths') ? Number(payload.get('warrantyMonths')) : undefined,
         warrantyType: String(payload.get('warrantyType') || product.warrantyType || '').trim() || undefined,
-        serviceInfo: String(payload.get('serviceInfo') || product.serviceInfo || '').trim() || undefined,
+        serviceInfo: String(payload.get('serviceInfo') ?? serviceInfoHtml).trim() || undefined,
+        recommendedAccessoryIds: recommendedAccessoryIds.map((id) => Number(id)),
         metaTitle: String(payload.get('metaTitle') || product.metaTitle || '').trim() || undefined,
         metaDescription: String(payload.get('metaDescription') || product.metaDescription || '').trim() || undefined,
       })
@@ -207,25 +236,35 @@ export default function EditProductPage() {
   if (isLoading) return <p className="text-muted-foreground">Загрузка...</p>
   if (!product) return <p className="text-muted-foreground">Товар не найден</p>
 
-  const addSpecRow = () => {
-    setSpecRows((prev) => [...prev, { id: `spec-${Date.now()}`, key: '', value: '' }])
+  const selectedAccessories = catalogProducts.filter((item) => recommendedAccessoryIds.includes(String(item.id)))
+  const availableAccessories = catalogProducts
+    .filter((item) => String(item.id) !== String(product.id))
+    .filter((item) => !recommendedAccessoryIds.includes(String(item.id)))
+    .filter((item) => item.name.toLowerCase().includes(accessoriesSearch.toLowerCase()))
+    .slice(0, 20)
+
+  const addAccessory = (id: string) => {
+    const normalizedId = String(id)
+    setRecommendedAccessoryIds((prev) => (prev.includes(normalizedId) ? prev : [...prev, normalizedId]))
   }
 
-  const updateSpecRow = (id: string, field: 'key' | 'value', nextValue: string) => {
-    setSpecRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: nextValue } : row)))
+  const removeAccessory = (id: string) => {
+    const normalizedId = String(id)
+    setRecommendedAccessoryIds((prev) => prev.filter((item) => item !== normalizedId))
   }
 
-  const removeSpecRow = (id: string) => {
-    setSpecRows((prev) => (prev.length > 1 ? prev.filter((row) => row.id !== id) : [{ id: 'spec-1', key: '', value: '' }]))
-  }
+  const selectedCategory = categories.find((category) => String(category.id) === String(categoryId || product.categoryId)) ?? null
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4"><Link href="/admin/products"><Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button></Link><h1 className="text-2xl font-bold">Редактирование товара</h1></div>
-      <form onSubmit={handleSave} className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader><CardTitle>Основная информация</CardTitle></CardHeader>
+      <form onSubmit={handleSave} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-6">
+          <Card className="border-blue-200/70 bg-blue-50/30 shadow-sm">
+            <CardHeader className="border-b bg-blue-100/40">
+              <CardTitle>Основная информация</CardTitle>
+              <p className="text-xs text-muted-foreground">Название, URL, описание и категория товара.</p>
+            </CardHeader>
             <CardContent className="space-y-4">
               <Input name="name" defaultValue={product.name} required />
               <div className="space-y-2">
@@ -251,9 +290,15 @@ export default function EditProductPage() {
                 onUploadImageFile={handleUploadDescriptionImage}
                 onDeleteImageFile={handleDeleteDescriptionImage}
               />
+              <input type="hidden" name="serviceInfo" value={serviceInfoHtml} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input name="brand" defaultValue={product.brand} />
-                <select name="categoryId" className="w-full rounded-md border bg-background px-3 py-2 text-sm" defaultValue={product.categoryId}>
+                <select
+                  name="categoryId"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={categoryId || String(product.categoryId)}
+                  onChange={(event) => setCategoryId(event.target.value)}
+                >
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>{category.name}</option>
                   ))}
@@ -261,37 +306,96 @@ export default function EditProductPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Характеристики</CardTitle>
-              <Button type="button" size="sm" variant="outline" onClick={addSpecRow}>
-                <Plus className="h-4 w-4 mr-1" />
-                Добавить
-              </Button>
+          <ProductSpecsEditor category={selectedCategory} rows={specRows} onChange={setSpecRows} />
+
+          <Card className="border-violet-200/70 bg-violet-50/30 shadow-sm">
+            <CardHeader className="border-b bg-violet-100/40">
+              <CardTitle>Сервисные услуги</CardTitle>
+              <p className="text-xs text-muted-foreground">Контент вкладки «Сервисные услуги» на странице товара.</p>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {specRows.map((row) => (
-                <div key={row.id} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-                  <Input
-                    placeholder="Название характеристики"
-                    value={row.key}
-                    onChange={(event) => updateSpecRow(row.id, 'key', event.target.value)}
-                  />
-                  <Input
-                    placeholder="Значение"
-                    value={row.value}
-                    onChange={(event) => updateSpecRow(row.id, 'value', event.target.value)}
-                  />
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeSpecRow(row.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+            <CardContent>
+              <DescriptionBlocksEditor
+                ref={serviceInfoEditorRef}
+                value={serviceInfoHtml}
+                onChange={setServiceInfoHtml}
+                onUploadImageFile={handleUploadDescriptionImage}
+                onDeleteImageFile={handleDeleteDescriptionImage}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="border-amber-200/70 bg-amber-50/30 shadow-sm">
+            <CardHeader className="border-b bg-amber-100/40">
+              <CardTitle>Рекомендуемые аксессуары</CardTitle>
+              <p className="text-xs text-muted-foreground">Товары из каталога для блока рекомендаций на витрине.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input
+                value={accessoriesSearch}
+                onChange={(event) => setAccessoriesSearch(event.target.value)}
+                placeholder="Поиск товара по названию"
+              />
+              <div className="space-y-2">
+                {selectedAccessories.length > 0 ? (
+                  selectedAccessories.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border p-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="relative h-10 w-10 overflow-hidden rounded border bg-muted/30">
+                          <Image
+                            src={resolveMediaUrl(item.images?.[0] || '/placeholder.svg')}
+                            alt={item.name}
+                            fill
+                            unoptimized
+                            className="object-contain p-1"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">ID: {item.id}</p>
+                        </div>
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeAccessory(item.id)}>
+                        Убрать
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Пока не выбрано ни одного аксессуара.</p>
+                )}
+              </div>
+              <div className="space-y-2 border-t pt-3">
+                {availableAccessories.length > 0 ? (
+                  availableAccessories.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border p-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="relative h-10 w-10 overflow-hidden rounded border bg-muted/30">
+                          <Image
+                            src={resolveMediaUrl(item.images?.[0] || '/placeholder.svg')}
+                            alt={item.name}
+                            fill
+                            unoptimized
+                            className="object-contain p-1"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">ID: {item.id}</p>
+                        </div>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => addAccessory(item.id)}>
+                        Добавить
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">По вашему запросу товары не найдены.</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
-        <div className="space-y-6">
-          <Card>
+        <div className="space-y-6 xl:sticky xl:top-20 xl:self-start">
+          <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Цена и остатки</CardTitle>
             </CardHeader>
@@ -331,7 +435,6 @@ export default function EditProductPage() {
               <Input name="sku" placeholder="SKU / артикул" defaultValue={product.sku} />
               <Input type="number" name="warrantyMonths" placeholder="Гарантия, мес" min={0} step={1} defaultValue={product.warrantyMonths} />
               <Input name="warrantyType" placeholder="Тип гарантии (например, официальная)" defaultValue={product.warrantyType} />
-              <Textarea name="serviceInfo" placeholder="Сервисные условия / сервисный центр" rows={3} defaultValue={product.serviceInfo} />
               <Collapsible open={additionalOpen} onOpenChange={setAdditionalOpen}>
                 <CollapsibleTrigger asChild>
                   <Button type="button" variant="outline" className="w-full justify-between">
@@ -361,7 +464,7 @@ export default function EditProductPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Фото товара</CardTitle>
             </CardHeader>
@@ -444,6 +547,15 @@ export default function EditProductPage() {
                   <p className="text-sm text-muted-foreground">Выбрано файлов: {images.length}</p>
                 )}
               </div>
+            </CardContent>
+          </Card>
+          <Card className="border-dashed shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Подсказки</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>После редактирования проверьте карточку на витрине: описание, аксессуары и фото.</p>
+              <p>Если меняете структуру блоков, лучше сохранить и открыть товар в новой вкладке для контроля.</p>
             </CardContent>
           </Card>
 

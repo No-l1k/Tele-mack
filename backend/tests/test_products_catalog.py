@@ -36,6 +36,7 @@ def _create_product(
     specs: dict | None = None,
     stock_status: str = "in_stock",
     gtin: str | None = None,
+    sku: str | None = None,
 ) -> dict:
     payload = {
         "name": name,
@@ -56,6 +57,8 @@ def _create_product(
     }
     if gtin is not None:
         payload["gtin"] = gtin
+    if sku is not None:
+        payload["sku"] = sku
     response = client.post("/api/products", headers=headers, json=payload)
     assert response.status_code == 200, response.text
     return response.json()["data"]
@@ -255,3 +258,229 @@ def test_invalid_stock_status_rejected():
         },
     )
     assert response.status_code == 400
+
+
+def test_recommended_accessory_ids_keep_only_existing_products():
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    cat_slug = f"cat-acc-{suffix}"
+    cat_id = _create_category(headers, name=f"Кат {suffix}", slug=cat_slug)
+    accessory = _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Accessory {suffix}",
+        slug=f"acc-{suffix}",
+    )
+
+    response = client.post(
+        "/api/products",
+        headers=headers,
+        json={
+            "name": f"Main with accessories {suffix}",
+            "slug": f"main-acc-{suffix}",
+            "description": "d",
+            "shortDescription": "s",
+            "price": 1000,
+            "categoryId": cat_id,
+            "categorySlug": cat_slug,
+            "brand": "X",
+            "specs": {},
+            "stockStatus": "in_stock",
+            "quantity": 1,
+            "recommendedAccessoryIds": [accessory["id"], 9_999_999],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["recommendedAccessoryIds"] == [accessory["id"]]
+
+
+def test_search_cyrillic_case_insensitive():
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    cat_slug = f"cat-cyr-{suffix}"
+    cat_id = _create_category(headers, name=f"Кат {suffix}", slug=cat_slug)
+    product = _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Телевизор LG Test {suffix}",
+        slug=f"tv-cyr-{suffix}",
+    )
+
+    response = client.get(
+        "/api/products/search",
+        params={"q": "телевизор", "page_size": 50},
+    )
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["data"]}
+    assert product["id"] in ids
+
+
+def test_search_finds_by_brand_case_insensitive():
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    cat_slug = f"cat-search-{suffix}"
+    cat_id = _create_category(headers, name=f"Кат {suffix}", slug=cat_slug)
+    product = _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Unique Name XYZ {suffix}",
+        slug=f"unique-{suffix}",
+        brand="Sony",
+    )
+
+    response = client.get("/api/products/search", params={"q": "sony", "page_size": 50})
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["data"]}
+    assert product["id"] in ids
+
+
+def test_search_multi_token_and_ranking():
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    token = f"RankToken{suffix}"
+    cat_slug = f"cat-rank-{suffix}"
+    cat_id = _create_category(headers, name=f"Кат {suffix}", slug=cat_slug)
+    exact = _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Exact {suffix}",
+        slug=f"exact-match-{suffix}",
+        brand=token,
+    )
+    _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Prefix {suffix}",
+        slug=f"prefix-match-{suffix}",
+        brand=f"{token}Plus",
+    )
+    _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Contains {suffix}",
+        slug=f"contains-word-{suffix}",
+        brand=f"X{token}X",
+    )
+
+    response = client.get(
+        "/api/products/search",
+        params={"q": token, "page": 1, "page_size": 10},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    ids = [item["id"] for item in data]
+    assert exact["id"] in ids
+    assert ids[0] == exact["id"]
+
+
+def test_search_requires_all_tokens():
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    cat_slug = f"cat-and-{suffix}"
+    cat_id = _create_category(headers, name=f"Кат {suffix}", slug=cat_slug)
+    match = _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Alpha Beta {suffix}",
+        slug=f"alpha-beta-{suffix}",
+        brand="Gamma",
+    )
+    _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Alpha Only {suffix}",
+        slug=f"alpha-only-{suffix}",
+        brand="Other",
+    )
+
+    response = client.get(
+        "/api/products/search",
+        params={"q": "alpha beta", "page_size": 50},
+    )
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["data"]}
+    assert match["id"] in ids
+
+
+def test_list_products_search_by_sku():
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    cat_slug = f"cat-sku-{suffix}"
+    cat_id = _create_category(headers, name=f"Кат {suffix}", slug=cat_slug)
+    product = _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"Any Name",
+        slug=f"any-{suffix}",
+        sku="SKU-ABC-123",
+    )
+
+    response = client.get("/api/products", params={"search": "SKU-ABC", "page_size": 20})
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["data"]}
+    assert product["id"] in ids
+
+
+def test_list_products_filter_by_spec_template():
+    import json
+
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    cat_slug = f"oled-tvs-{suffix}"
+    cat_id = _create_category(headers, name=f"OLED телевизоры {suffix}", slug=cat_slug)
+    smart_tv = _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"TV Smart {suffix}",
+        slug=f"tv-smart-{suffix}",
+        specs={"Поддержка Smart TV": "есть", "Разрешение экрана": "4K Ultra HD"},
+    )
+    _create_product(
+        headers,
+        category_id=cat_id,
+        category_slug=cat_slug,
+        name=f"TV Basic {suffix}",
+        slug=f"tv-basic-{suffix}",
+        specs={"Поддержка Smart TV": "нет", "Разрешение экрана": "Full HD"},
+    )
+
+    spec_filters = json.dumps({"Поддержка Smart TV": ["есть"]}, ensure_ascii=False)
+    response = client.get(
+        "/api/products",
+        params={"category": cat_slug, "spec_filters": spec_filters, "page_size": 50},
+    )
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["data"]}
+    assert smart_tv["id"] in ids
+    assert len(ids) == 1
+
+    meta = client.get(
+        "/api/products/filters/meta",
+        params={"category": cat_slug},
+    )
+    assert meta.status_code == 200
+    facets = meta.json()["data"]["specFacets"]
+    assert "Поддержка Smart TV" in facets
+    assert "есть" in facets["Поддержка Smart TV"]
+    assert "нет" in facets["Поддержка Smart TV"]
+
+    meta_filtered = client.get(
+        "/api/products/filters/meta",
+        params={"category": cat_slug, "spec_filters": spec_filters},
+    )
+    assert meta_filtered.status_code == 200
+    facets_filtered = meta_filtered.json()["data"]["specFacets"]
+    assert "Разрешение экрана" in facets_filtered
+    assert "4K Ultra HD" in facets_filtered["Разрешение экрана"]
+    assert "Full HD" in facets_filtered["Разрешение экрана"]

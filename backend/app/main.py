@@ -16,7 +16,7 @@ from .database import (
     ensure_order_item_columns,
     ensure_product_columns,
 )
-from .routers import admin, auth, cart, categories, orders, products, public, reviews, users
+from .routers import admin, auth, cart, categories, feeds, orders, products, public, reviews, users
 
 settings.validate_runtime_security()
 
@@ -63,6 +63,7 @@ app.include_router(users.router, prefix=settings.api_prefix)
 app.include_router(cart.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)
 app.include_router(public.router, prefix=settings.api_prefix)
+app.include_router(feeds.router, prefix=settings.api_prefix)
 app.include_router(reviews.router, prefix=settings.api_prefix)
 
 uploads_dir = Path(__file__).resolve().parents[1] / "uploads"

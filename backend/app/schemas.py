@@ -77,6 +77,7 @@ class ProductBase(BaseModel):
     warrantyMonths: int | None = Field(default=None, ge=0)
     warrantyType: str | None = None
     serviceInfo: str | None = None
+    recommendedAccessoryIds: list[int] = Field(default_factory=list)
     metaTitle: str | None = None
     metaDescription: str | None = None
 
@@ -114,6 +115,7 @@ class ProductUpdateIn(BaseModel):
     warrantyMonths: int | None = Field(default=None, ge=0)
     warrantyType: str | None = None
     serviceInfo: str | None = None
+    recommendedAccessoryIds: list[int] | None = None
     metaTitle: str | None = None
     metaDescription: str | None = None
 

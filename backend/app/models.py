@@ -64,6 +64,7 @@ class Product(Base):
     warranty_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     warranty_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     service_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommended_accessory_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
     meta_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     meta_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

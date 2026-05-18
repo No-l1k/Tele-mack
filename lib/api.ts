@@ -46,6 +46,7 @@ interface ProductWritePayload {
   warrantyMonths?: number
   warrantyType?: string
   serviceInfo?: string
+  recommendedAccessoryIds?: number[]
   metaTitle?: string
   metaDescription?: string
   images: string[]
@@ -135,6 +136,9 @@ export const productsApi = {
     if (filters?.isNew) params.set('is_new', 'true')
     if (filters?.search) params.set('search', filters.search)
     if (filters?.sortBy) params.set('sort', filters.sortBy)
+    if (filters?.specFilters && Object.keys(filters.specFilters).length > 0) {
+      params.set('spec_filters', JSON.stringify(filters.specFilters))
+    }
     params.set('page', String(page))
     params.set('page_size', String(pageSize))
     

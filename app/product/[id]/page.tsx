@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { ProductGallery } from '@/components/product/product-gallery'
 import { ProductGrid } from '@/components/catalog/product-grid'
+import { ProductsCarousel } from '@/components/catalog/products-carousel'
 import { Rating } from '@/components/ui/rating'
 import { QuantitySelector } from '@/components/ui/quantity-selector'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -22,10 +23,11 @@ import { useFavorites } from '@/context/favorites-context'
 import { 
   getProductByIdOrSlug,
   getCategoryBySlug,
+  getProductsByIds,
   getProductsByCategory,
 } from '@/lib/data/catalog'
-import { publicSettingsApi, reviewsApi } from '@/lib/api'
-import { formatPrice, formatReviewsCount, calculateDiscount, formatDate } from '@/lib/formatters'
+import { publicSettingsApi } from '@/lib/api'
+import { formatPrice, formatReviewsCount, calculateDiscount } from '@/lib/formatters'
 import { resolveMediaUrl } from '@/lib/media'
 import { cn } from '@/lib/utils'
 import { isCompleteRuPhone } from '@/lib/phone'
@@ -34,7 +36,7 @@ import { Input } from '@/components/ui/input'
 import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import type { Category, Product, Review } from '@/types'
+import type { Category, Product } from '@/types'
 
 export default function ProductPage() {
   const router = useRouter()
@@ -42,7 +44,7 @@ export default function ProductPage() {
   const productId = params.id as string
   const [product, setProduct] = useState<Product | undefined>(undefined)
   const [category, setCategory] = useState<Category | undefined>(undefined)
-  const [reviews, setReviews] = useState<Review[]>([])
+  const [recommendedAccessories, setRecommendedAccessories] = useState<Product[]>([])
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
@@ -69,23 +71,23 @@ export default function ProductPage() {
           if (!cancelled) {
             setProduct(undefined)
             setCategory(undefined)
-            setReviews([])
+            setRecommendedAccessories([])
             setRelatedProducts([])
             setIsLoading(false)
           }
           return
         }
 
-        const [loadedCategory, loadedReviews, loadedRelated] = await Promise.all([
+        const [loadedCategory, loadedAccessories, loadedRelated] = await Promise.all([
           getCategoryBySlug(loadedProduct.categorySlug),
-          reviewsApi.getByProduct(loadedProduct.id).then((response) => response.data).catch(() => []),
+          getProductsByIds(loadedProduct.recommendedAccessoryIds ?? []),
           getProductsByCategory(loadedProduct.categorySlug, 8),
         ])
 
         if (!cancelled) {
           setProduct(loadedProduct)
           setCategory(loadedCategory)
-          setReviews(loadedReviews)
+          setRecommendedAccessories(loadedAccessories.filter((item) => item.id !== loadedProduct.id))
           setRelatedProducts(loadedRelated.filter((item) => item.id !== loadedProduct.id).slice(0, 4))
         }
       } catch {
@@ -127,6 +129,26 @@ export default function ProductPage() {
       return root.innerHTML
     },
     [product?.description],
+  )
+  const safeServiceInfoHtml = useMemo(
+    () => {
+      const sanitized = sanitizeDescriptionHtml(prepareDescriptionHtml(product?.serviceInfo || ''))
+      if (!sanitized || typeof window === 'undefined') return sanitized
+
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(`<div>${sanitized}</div>`, 'text/html')
+      const root = doc.body.firstElementChild
+      if (!root) return sanitized
+
+      root.querySelectorAll('img').forEach((img) => {
+        const src = img.getAttribute('src')
+        if (!src) return
+        img.setAttribute('src', resolveMediaUrl(src))
+      })
+
+      return root.innerHTML
+    },
+    [product?.serviceInfo],
   )
 
   if (isLoading) {
@@ -183,6 +205,8 @@ export default function ProductPage() {
   const discount = product.oldPrice ? calculateDiscount(product.price, product.oldPrice) : 0
   const inCart = isInCart(product.id)
   const favorite = isFavorite(product.id)
+  const cashPrice = product.price
+  const cashlessPrice = Math.round(product.price * 1.15)
 
   const handleAddToCart = () => {
     if (inCart) {
@@ -302,7 +326,6 @@ export default function ProductPage() {
                 {product.warrantyMonths !== undefined && product.warrantyMonths !== null && (
                   <p>Гарантия: {product.warrantyMonths} мес{product.warrantyType ? `, ${product.warrantyType}` : ''}</p>
                 )}
-                {product.serviceInfo && <p>{product.serviceInfo}</p>}
               </div>
 
               {/* Quantity and Add to cart */}
@@ -458,6 +481,18 @@ export default function ProductPage() {
                   <div className="text-xs text-muted-foreground">1 000 руб по Москве и МО, за МКАД +50 руб/км</div>
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-xs text-emerald-700">Цена при оплате наличными</p>
+                  <p className="mt-1 text-lg font-semibold text-emerald-900">{formatPrice(cashPrice)}</p>
+                </div>
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs text-amber-700">Цена по безналичному расчёту</p>
+                  <p className="mt-1 text-lg font-semibold text-amber-900">{formatPrice(cashlessPrice)}</p>
+                  <p className="text-xs text-amber-700">+15% к базовой цене</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -476,11 +511,11 @@ export default function ProductPage() {
               >
                 Характеристики
               </TabsTrigger>
-              <TabsTrigger 
-                value="reviews"
+              <TabsTrigger
+                value="service"
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
               >
-                Отзывы ({reviews.length})
+                Сервисные услуги
               </TabsTrigger>
             </TabsList>
 
@@ -515,42 +550,36 @@ export default function ProductPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="reviews" className="mt-6">
-              {reviews.length > 0 ? (
-                <div className="space-y-6">
-                  {reviews.map(review => (
-                    <div key={review.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="font-medium">{review.userName}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {formatDate(review.createdAt)}
-                        </div>
-                      </div>
-                      <Rating value={review.rating} size="sm" className="mb-3" />
-                      <p className="text-sm">{review.text}</p>
-                      {review.pros && (
-                        <div className="mt-3">
-                          <span className="text-sm font-medium text-green-600">Достоинства: </span>
-                          <span className="text-sm">{review.pros}</span>
-                        </div>
-                      )}
-                      {review.cons && (
-                        <div className="mt-1">
-                          <span className="text-sm font-medium text-red-600">Недостатки: </span>
-                          <span className="text-sm">{review.cons}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+            <TabsContent value="service" className="mt-6">
+              {safeServiceInfoHtml ? (
+                <div
+                  className={cn(
+                    'prose prose-sm max-w-none text-sm leading-6',
+                    '[&>div>div]:grid [&>div>div]:gap-6 md:[&>div>div]:grid-cols-2 md:[&>div>div]:gap-x-10 md:[&>div>div]:gap-y-8',
+                    '[&_section]:max-w-none [&_section]:my-0',
+                    '[&_h2]:mt-0 [&_h2]:mb-2 [&_h2]:text-lg sm:[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-snug',
+                    '[&_p]:my-2 [&_p]:leading-6',
+                    '[&_figure]:max-w-[820px] [&_figure]:my-3 sm:[&_figure]:my-4 [&_figure]:overflow-hidden [&_figure]:rounded-md [&_figure]:bg-muted/20',
+                    '[&_img]:block [&_img]:w-full [&_img]:h-auto [&_img]:max-h-[220px] sm:[&_img]:max-h-[320px] lg:[&_img]:max-h-[380px] [&_img]:object-contain',
+                    '[&_ul]:my-2 [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:pl-5',
+                  )}
+                >
+                  <div dangerouslySetInnerHTML={{ __html: safeServiceInfoHtml }} />
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground mb-4">Пока нет отзывов</p>
-                  <Button variant="outline">Написать отзыв</Button>
-                </div>
+                <p className="text-sm text-muted-foreground">Информация о сервисных услугах для этого товара пока не заполнена.</p>
               )}
             </TabsContent>
           </Tabs>
+
+          {recommendedAccessories.length > 0 && (
+            <section className="relative left-1/2 mt-12 w-screen -translate-x-1/2 bg-zinc-800 text-zinc-100">
+              <div className="px-4 py-6 sm:px-6 lg:px-10">
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-200">Рекомендуемые аксессуары</h2>
+                <ProductsCarousel products={recommendedAccessories} centerWhenFew />
+              </div>
+            </section>
+          )}
 
           {/* Related products */}
           {relatedProducts.length > 0 && (

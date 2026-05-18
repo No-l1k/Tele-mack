@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ChevronDown, Plus, Trash2 } from 'lucide-react'
+import Image from 'next/image'
+import { ArrowLeft, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { categoriesApi, productsApi } from '@/lib/api'
-import type { Category } from '@/types'
+import type { Category, Product } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,16 +22,12 @@ import {
   DescriptionBlocksEditor,
   type DescriptionBlocksEditorHandle,
 } from '@/components/admin/description-blocks-editor'
+import { ProductSpecsEditor, type SpecRow } from '@/components/admin/product-specs-editor'
 import { injectUploadedImageUrls } from '@/lib/description-blocks'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
 import { normalizeProductSlug, normalizeProductSlugInput } from '@/lib/admin-slug'
+import { resolveMediaUrl } from '@/lib/media'
 import { htmlToText } from '@/lib/rich-text'
-
-type SpecRow = {
-  id: string
-  key: string
-  value: string
-}
 
 const normalizeBrand = (value: string) =>
   value
@@ -39,25 +36,49 @@ const normalizeBrand = (value: string) =>
     .map((part) => (part ? part[0].toUpperCase() + part.slice(1).toLowerCase() : part))
     .join(' ')
 
+async function loadCatalogProducts(): Promise<Product[]> {
+  const allProducts: Product[] = []
+  let page = 1
+  let totalPages = 1
+
+  while (page <= totalPages) {
+    const response = await productsApi.getAll(undefined, page, 100)
+    allProducts.push(...response.data)
+    totalPages = response.totalPages || 1
+    page += 1
+  }
+
+  return allProducts
+}
+
 export default function NewProductPage() {
   const router = useRouter()
   const [categories, setCategories] = useState<Category[]>([])
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
+  const [recommendedAccessoryIds, setRecommendedAccessoryIds] = useState<string[]>([])
+  const [accessoriesSearch, setAccessoriesSearch] = useState('')
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
   const [categoryId, setCategoryId] = useState('')
   const [images, setImages] = useState<File[]>([])
   const [descriptionHtml, setDescriptionHtml] = useState('')
+  const [serviceInfoHtml, setServiceInfoHtml] = useState('')
   const [ratingMode, setRatingMode] = useState<'manual' | 'auto'>('manual')
   const [isLoading, setIsLoading] = useState(false)
   const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '' }])
   const [additionalOpen, setAdditionalOpen] = useState(false)
   const descriptionEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
+  const serviceInfoEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
 
   useEffect(() => {
     ;(async () => {
-      const response = await categoriesApi.getAll().catch(() => null)
-      setCategories(response?.data ?? [])
+      const [categoriesResponse, products] = await Promise.all([
+        categoriesApi.getAll().catch(() => null),
+        loadCatalogProducts().catch(() => []),
+      ])
+      setCategories(categoriesResponse?.data ?? [])
+      setCatalogProducts(products.map((item) => ({ ...item, id: String(item.id) })))
     })()
   }, [])
 
@@ -103,23 +124,40 @@ export default function NewProductPage() {
         warrantyMonths: payload.get('warrantyMonths') ? Number(payload.get('warrantyMonths')) : undefined,
         warrantyType: String(payload.get('warrantyType') || '').trim() || undefined,
         serviceInfo: String(payload.get('serviceInfo') || '').trim() || undefined,
+        recommendedAccessoryIds: recommendedAccessoryIds.map((id) => Number(id)),
         metaTitle: String(payload.get('metaTitle') || '').trim() || undefined,
         metaDescription: String(payload.get('metaDescription') || '').trim() || undefined,
         images: [],
       })
       const productId = String(response.data.id)
       let finalDescription = String(payload.get('description') || descriptionHtml)
-      const pendingImages = descriptionEditorRef.current?.getPendingImageFilesByBlockId() ?? {}
-      const pendingEntries = Object.entries(pendingImages).filter(([, file]) => file)
-      if (pendingEntries.length > 0) {
+      let finalServiceInfo = String(payload.get('serviceInfo') || serviceInfoHtml)
+
+      const uploadPendingEditorImages = async (
+        editorRef: { current: DescriptionBlocksEditorHandle | null },
+        html: string,
+      ) => {
+        const pendingImages = editorRef.current?.getPendingImageFilesByBlockId() ?? {}
+        const pendingEntries = Object.entries(pendingImages).filter(([, file]) => file)
+        if (pendingEntries.length === 0) return html
+
         const urlsByBlockId: Record<string, string> = {}
         for (const [blockId, file] of pendingEntries) {
           const uploaded = await productsApi.uploadImages(productId, [file])
           const url = uploaded.data?.[0]
           if (url) urlsByBlockId[blockId] = url
         }
-        finalDescription = injectUploadedImageUrls(finalDescription, urlsByBlockId)
-        await productsApi.update(productId, { description: finalDescription })
+        return injectUploadedImageUrls(html, urlsByBlockId)
+      }
+
+      finalDescription = await uploadPendingEditorImages(descriptionEditorRef, finalDescription)
+      finalServiceInfo = await uploadPendingEditorImages(serviceInfoEditorRef, finalServiceInfo)
+
+      if (finalDescription !== descriptionHtml || finalServiceInfo !== serviceInfoHtml) {
+        await productsApi.update(productId, {
+          description: finalDescription,
+          serviceInfo: finalServiceInfo.trim() || undefined,
+        })
       }
       if (images.length > 0) {
         await productsApi.uploadImages(productId, images)
@@ -133,17 +171,23 @@ export default function NewProductPage() {
     }
   }
 
-  const addSpecRow = () => {
-    setSpecRows((prev) => [...prev, { id: `spec-${Date.now()}`, key: '', value: '' }])
+  const selectedAccessories = catalogProducts.filter((item) => recommendedAccessoryIds.includes(String(item.id)))
+  const availableAccessories = catalogProducts
+    .filter((item) => !recommendedAccessoryIds.includes(String(item.id)))
+    .filter((item) => item.name.toLowerCase().includes(accessoriesSearch.toLowerCase()))
+    .slice(0, 20)
+
+  const addAccessory = (id: string) => {
+    const normalizedId = String(id)
+    setRecommendedAccessoryIds((prev) => (prev.includes(normalizedId) ? prev : [...prev, normalizedId]))
   }
 
-  const updateSpecRow = (id: string, field: 'key' | 'value', nextValue: string) => {
-    setSpecRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: nextValue } : row)))
+  const removeAccessory = (id: string) => {
+    const normalizedId = String(id)
+    setRecommendedAccessoryIds((prev) => prev.filter((item) => item !== normalizedId))
   }
 
-  const removeSpecRow = (id: string) => {
-    setSpecRows((prev) => (prev.length > 1 ? prev.filter((row) => row.id !== id) : [{ id: 'spec-1', key: '', value: '' }]))
-  }
+  const selectedCategory = categories.find((category) => category.id === categoryId) ?? null
 
   return (
     <div className="space-y-6">
@@ -151,10 +195,13 @@ export default function NewProductPage() {
         <Link href="/admin/products"><Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button></Link>
         <h1 className="text-2xl font-bold">Новый товар</h1>
       </div>
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader><CardTitle>Основная информация</CardTitle></CardHeader>
+      <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-6">
+          <Card className="border-blue-200/70 bg-blue-50/30 shadow-sm">
+            <CardHeader className="border-b bg-blue-100/40">
+              <CardTitle>Основная информация</CardTitle>
+              <p className="text-xs text-muted-foreground">Название, URL, описание и категория товара.</p>
+            </CardHeader>
             <CardContent className="space-y-4">
               <Input
                 name="name"
@@ -194,6 +241,7 @@ export default function NewProductPage() {
                 value={descriptionHtml}
                 onChange={setDescriptionHtml}
               />
+              <input type="hidden" name="serviceInfo" value={serviceInfoHtml} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input name="brand" placeholder="Бренд" />
                 <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>
@@ -204,37 +252,94 @@ export default function NewProductPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Характеристики</CardTitle>
-              <Button type="button" size="sm" variant="outline" onClick={addSpecRow}>
-                <Plus className="h-4 w-4 mr-1" />
-                Добавить
-              </Button>
+          <ProductSpecsEditor category={selectedCategory} rows={specRows} onChange={setSpecRows} />
+
+          <Card className="border-violet-200/70 bg-violet-50/30 shadow-sm">
+            <CardHeader className="border-b bg-violet-100/40">
+              <CardTitle>Сервисные услуги</CardTitle>
+              <p className="text-xs text-muted-foreground">Контент вкладки «Сервисные услуги» на странице товара.</p>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {specRows.map((row) => (
-                <div key={row.id} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-                  <Input
-                    placeholder="Название характеристики"
-                    value={row.key}
-                    onChange={(event) => updateSpecRow(row.id, 'key', event.target.value)}
-                  />
-                  <Input
-                    placeholder="Значение"
-                    value={row.value}
-                    onChange={(event) => updateSpecRow(row.id, 'value', event.target.value)}
-                  />
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeSpecRow(row.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+            <CardContent>
+              <DescriptionBlocksEditor
+                ref={serviceInfoEditorRef}
+                value={serviceInfoHtml}
+                onChange={setServiceInfoHtml}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="border-amber-200/70 bg-amber-50/30 shadow-sm">
+            <CardHeader className="border-b bg-amber-100/40">
+              <CardTitle>Рекомендуемые аксессуары</CardTitle>
+              <p className="text-xs text-muted-foreground">Выберите товары, которые показываются в отдельном блоке на карточке.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input
+                value={accessoriesSearch}
+                onChange={(event) => setAccessoriesSearch(event.target.value)}
+                placeholder="Поиск товара по названию"
+              />
+              <div className="space-y-2">
+                {selectedAccessories.length > 0 ? (
+                  selectedAccessories.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border p-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="relative h-10 w-10 overflow-hidden rounded border bg-muted/30">
+                          <Image
+                            src={resolveMediaUrl(item.images?.[0] || '/placeholder.svg')}
+                            alt={item.name}
+                            fill
+                            unoptimized
+                            className="object-contain p-1"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">ID: {item.id}</p>
+                        </div>
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeAccessory(item.id)}>
+                        Убрать
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Пока не выбрано ни одного аксессуара.</p>
+                )}
+              </div>
+              <div className="space-y-2 border-t pt-3">
+                {availableAccessories.length > 0 ? (
+                  availableAccessories.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border p-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="relative h-10 w-10 overflow-hidden rounded border bg-muted/30">
+                          <Image
+                            src={resolveMediaUrl(item.images?.[0] || '/placeholder.svg')}
+                            alt={item.name}
+                            fill
+                            unoptimized
+                            className="object-contain p-1"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">ID: {item.id}</p>
+                        </div>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => addAccessory(item.id)}>
+                        Добавить
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">По вашему запросу товары не найдены.</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
-        <div className="space-y-6">
-          <Card>
+        <div className="space-y-6 xl:sticky xl:top-20 xl:self-start">
+          <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Цена и остатки</CardTitle>
             </CardHeader>
@@ -270,7 +375,6 @@ export default function NewProductPage() {
               <Input name="sku" placeholder="SKU / артикул" />
               <Input type="number" name="warrantyMonths" placeholder="Гарантия, мес" min={0} step={1} />
               <Input name="warrantyType" placeholder="Тип гарантии (например, официальная)" />
-              <Textarea name="serviceInfo" placeholder="Сервисные условия / сервисный центр" rows={3} />
               <Collapsible open={additionalOpen} onOpenChange={setAdditionalOpen}>
                 <CollapsibleTrigger asChild>
                   <Button type="button" variant="outline" className="w-full justify-between">
@@ -299,7 +403,7 @@ export default function NewProductPage() {
               </label>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Фото</CardTitle>
             </CardHeader>
@@ -314,6 +418,16 @@ export default function NewProductPage() {
               <p className="text-xs text-muted-foreground">
                 После создания товара можно изменить порядок и удалить лишние фото в редактировании.
               </p>
+            </CardContent>
+          </Card>
+          <Card className="border-dashed shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Подсказки</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>Старайтесь делать короткий и понятный slug для SEO.</p>
+              <p>Добавьте хотя бы 2-3 ключевые характеристики, чтобы карточка выглядела законченной.</p>
+              <p>Для аксессуаров лучше выбирать 3-8 товаров, чтобы блок смотрелся аккуратно.</p>
             </CardContent>
           </Card>
           <Button type="submit" className="w-full" disabled={isLoading}>

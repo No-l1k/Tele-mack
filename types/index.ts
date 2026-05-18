@@ -23,6 +23,7 @@ export interface Product {
   warrantyMonths?: number
   warrantyType?: string
   serviceInfo?: string
+  recommendedAccessoryIds?: string[]
   metaTitle?: string
   metaDescription?: string
   isNew: boolean
@@ -152,7 +153,11 @@ export interface ProductFilters {
   isNew?: boolean
   search?: string
   sortBy?: 'price-asc' | 'price-desc' | 'rating' | 'newest' | 'popular'
+  /** Имя характеристики → выбранные значения (для шаблонных фильтров категории). */
+  specFilters?: Record<string, string[]>
 }
+
+export type SpecFacets = Record<string, string[]>
 
 // API Response Types
 export interface ApiResponse<T> {

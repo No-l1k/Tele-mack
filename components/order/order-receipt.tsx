@@ -16,7 +16,7 @@ function formatAddress(order: Order): string {
   }
   const { city, street, house, apartment } = order.address
   const apt = apartment ? `, кв. ${apartment}` : ''
-  return `г ${city}, ${street}, д. ${house}${apt}`
+  return `${city}, ${street}, д. ${house}${apt}`
 }
 
 function deliveryNotes(order: Order, settings: StoreSettings | null): string {

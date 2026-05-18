@@ -25,12 +25,16 @@ export default function CategoryPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 24
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefetching, setIsRefetching] = useState(false)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [brands, setBrands] = useState<string[]>([])
   const [computedPriceRange, setComputedPriceRange] = useState({ min: 0, max: 0 })
 
   const [selectedBrands, setSelectedBrands] = useState<string[]>([])
   const [selectedPriceRange, setSelectedPriceRange] = useState<[number, number]>([0, 0])
+  const [selectedSpecFilters, setSelectedSpecFilters] = useState<Record<string, string[]>>({})
+  const [specFacets, setSpecFacets] = useState<Record<string, string[]>>({})
   const [inStockOnly, setInStockOnly] = useState(false)
   const [sortBy, setSortBy] = useState<ProductFiltersType['sortBy']>('popular')
   const [didInitFilters, setDidInitFilters] = useState(false)
@@ -38,6 +42,9 @@ export default function CategoryPage() {
   useEffect(() => {
     let cancelled = false
     const normalizedSort = sortBy === 'newest' ? 'popular' : sortBy
+    const activeSpecFilters = Object.fromEntries(
+      Object.entries(selectedSpecFilters).filter(([, values]) => values.length > 0),
+    )
     const filters: ProductFiltersType = {
       categorySlug,
       minPrice: selectedPriceRange[0] || undefined,
@@ -45,17 +52,25 @@ export default function CategoryPage() {
       brands: selectedBrands.length ? selectedBrands : undefined,
       inStock: inStockOnly || undefined,
       sortBy: normalizedSort,
+      specFilters: Object.keys(activeSpecFilters).length ? activeSpecFilters : undefined,
     }
 
     async function loadCategoryData() {
       try {
-        setIsLoading(true)
+        if (!hasLoadedOnce) {
+          setIsLoading(true)
+        } else {
+          setIsRefetching(true)
+        }
         setHasError(false)
 
         const [loadedCategory, loadedProductsPage, meta] = await Promise.all([
           getCategoryBySlug(categorySlug),
           getProductsPage(filters, currentPage, pageSize),
-          getProductFiltersMeta({ categorySlug, inStock: inStockOnly || undefined }),
+          getProductFiltersMeta({
+            categorySlug,
+            inStock: inStockOnly || undefined,
+          }),
         ])
 
         if (!cancelled) {
@@ -64,21 +79,26 @@ export default function CategoryPage() {
           setTotal(loadedProductsPage.total)
           setBrands(meta.brands)
           setComputedPriceRange(meta.priceRange)
+          setSpecFacets(meta.specFacets ?? {})
           if (!didInitFilters && meta.priceRange.max > 0) {
             setSelectedPriceRange([meta.priceRange.min, meta.priceRange.max])
             setDidInitFilters(true)
           }
+          setHasLoadedOnce(true)
         }
       } catch {
         if (!cancelled) {
           setHasError(true)
-          setCategory(undefined)
+          if (!hasLoadedOnce) {
+            setCategory(undefined)
+          }
           setProducts([])
           setTotal(0)
         }
       } finally {
         if (!cancelled) {
           setIsLoading(false)
+          setIsRefetching(false)
         }
       }
     }
@@ -87,11 +107,12 @@ export default function CategoryPage() {
     return () => {
       cancelled = true
     }
-  }, [categorySlug, selectedBrands, selectedPriceRange, inStockOnly, sortBy, currentPage, didInitFilters])
+  }, [categorySlug, selectedBrands, selectedPriceRange, selectedSpecFilters, inStockOnly, sortBy, currentPage, didInitFilters])
 
   const resetFilters = () => {
     setSelectedBrands([])
     setSelectedPriceRange([computedPriceRange.min, computedPriceRange.max])
+    setSelectedSpecFilters({})
     setInStockOnly(false)
     setCurrentPage(1)
   }
@@ -111,13 +132,18 @@ export default function CategoryPage() {
     setInStockOnly(value)
   }
 
+  const handleSpecFiltersChange = (value: Record<string, string[]>) => {
+    setCurrentPage(1)
+    setSelectedSpecFilters(value)
+  }
+
   const handleSortChange = (value: ProductFiltersType['sortBy']) => {
     setCurrentPage(1)
     setSortBy(value)
   }
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  if (isLoading) {
+  if (isLoading && !hasLoadedOnce) {
     return (
       <>
         <Header />
@@ -185,11 +211,14 @@ export default function CategoryPage() {
                 brands={brands}
                 selectedBrands={selectedBrands}
                 onBrandsChange={handleBrandsChange}
-                  priceRange={computedPriceRange}
+                priceRange={computedPriceRange}
                 selectedPriceRange={selectedPriceRange}
                 onPriceRangeChange={handlePriceRangeChange}
                 inStockOnly={inStockOnly}
                 onInStockChange={handleInStockChange}
+                specFacets={specFacets}
+                selectedSpecFilters={selectedSpecFilters}
+                onSpecFiltersChange={handleSpecFiltersChange}
                 onReset={resetFilters}
               />
             </div>
@@ -215,6 +244,9 @@ export default function CategoryPage() {
                       onPriceRangeChange={handlePriceRangeChange}
                       inStockOnly={inStockOnly}
                       onInStockChange={handleInStockChange}
+                      specFacets={specFacets}
+                      selectedSpecFilters={selectedSpecFilters}
+                      onSpecFiltersChange={handleSpecFiltersChange}
                       onReset={resetFilters}
                     />
                   </div>
@@ -224,7 +256,9 @@ export default function CategoryPage() {
                 </div>
               </div>
 
-              <ProductGrid products={products} columns={3} />
+              <div className={isRefetching ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
+                <ProductGrid products={products} columns={3} />
+              </div>
 
               {totalPages > 1 && (
                 <div className="mt-6 flex items-center justify-center gap-3">

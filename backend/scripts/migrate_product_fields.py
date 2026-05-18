@@ -15,6 +15,7 @@ def main() -> None:
         "warranty_months": "ALTER TABLE products ADD COLUMN warranty_months INTEGER",
         "warranty_type": "ALTER TABLE products ADD COLUMN warranty_type VARCHAR(100)",
         "service_info": "ALTER TABLE products ADD COLUMN service_info VARCHAR(100)",
+        "recommended_accessory_ids": "ALTER TABLE products ADD COLUMN recommended_accessory_ids JSON",
         "meta_title": "ALTER TABLE products ADD COLUMN meta_title VARCHAR(255)",
         "meta_description": "ALTER TABLE products ADD COLUMN meta_description VARCHAR(500)",
     }

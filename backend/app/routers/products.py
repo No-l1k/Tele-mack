@@ -1,17 +1,17 @@
+import json
 import re
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy import asc
-from sqlalchemy import func
+from sqlalchemy import and_, asc, desc, func, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import desc
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.attributes import flag_modified
 
-from ..database import get_db
+from ..database import get_db, is_sqlite
+from ..product_spec_templates import build_spec_facets, get_spec_template_for_category
 from ..deps import get_current_admin, get_current_user
 from ..config import settings
 from ..models import CartItem, Category, Favorite, OrderItem, Product, Review, User
@@ -97,6 +97,182 @@ def _normalize_gtin(value: str | None) -> str | None:
     return digits
 
 
+def _normalize_search_query(value: str | None) -> str:
+    return " ".join((value or "").strip().casefold().split())
+
+
+def _search_tokens(value: str | None, min_len: int = 2) -> list[str]:
+    normalized = _normalize_search_query(value)
+    if not normalized:
+        return []
+    seen: set[str] = set()
+    tokens: list[str] = []
+    for token in normalized.split():
+        if len(token) < min_len or token in seen:
+            continue
+        seen.add(token)
+        tokens.append(token)
+    return tokens
+
+
+def _product_search_fields(product: Product) -> tuple[str, str, str, str, str]:
+    return (
+        (product.name or "").strip().casefold(),
+        (product.brand or "").strip().casefold(),
+        (product.sku or "").strip().casefold(),
+        (product.gtin or "").strip().casefold(),
+        (product.short_description or "").strip().casefold(),
+    )
+
+
+def _product_matches_token(product: Product, token: str) -> bool:
+    token_cf = token.casefold()
+    for field_value in _product_search_fields(product):
+        if token_cf and token_cf in field_value:
+            return True
+    return False
+
+
+def _search_relevance_score(product: Product, tokens: list[str], full_query: str) -> int:
+    if not tokens and not full_query:
+        return 0
+    score = 0
+    for field in _product_search_fields(product):
+        if not field:
+            continue
+        if full_query and field == full_query:
+            score = max(score, 80)
+        elif full_query and field.startswith(full_query):
+            score = max(score, 50)
+        elif full_query and full_query in field:
+            score = max(score, 30)
+    for token in tokens:
+        for field in _product_search_fields(product):
+            if not field:
+                continue
+            if field == token:
+                score = max(score, 40)
+            elif field.startswith(token):
+                score = max(score, 20)
+            elif token in field:
+                score = max(score, 10)
+    return score
+
+
+def _sql_search_token_clauses(tokens: list[str]):
+    """SQL pre-filter (PostgreSQL ILIKE is Unicode case-insensitive; SQLite is not)."""
+    per_token = []
+    for token in tokens:
+        pattern = f"%{token}%"
+        per_token.append(
+            or_(
+                Product.name.ilike(pattern),
+                Product.brand.ilike(pattern),
+                Product.sku.ilike(pattern),
+                Product.gtin.ilike(pattern),
+                Product.short_description.ilike(pattern),
+            )
+        )
+    return per_token
+
+
+def _product_matches_all_tokens(product: Product, tokens: list[str]) -> bool:
+    return all(_product_matches_token(product, token) for token in tokens)
+
+
+def _filter_products_by_tokens(products: list[Product], tokens: list[str]) -> list[Product]:
+    if not tokens:
+        return products
+    return [product for product in products if _product_matches_all_tokens(product, tokens)]
+
+
+def _parse_spec_filters(raw: str | None) -> dict[str, list[str]]:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid spec_filters JSON") from exc
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid spec_filters JSON")
+    parsed: dict[str, list[str]] = {}
+    for key, value in data.items():
+        key_str = str(key).strip()
+        if not key_str:
+            continue
+        if isinstance(value, list):
+            values = [str(item).strip() for item in value if str(item).strip()]
+        else:
+            values = [str(value).strip()] if str(value).strip() else []
+        if values:
+            parsed[key_str] = values
+    return parsed
+
+
+def _product_matches_spec_filters(product: Product, spec_filters: dict[str, list[str]]) -> bool:
+    if not spec_filters:
+        return True
+    specs = product.specs if isinstance(product.specs, dict) else {}
+    for key, selected_values in spec_filters.items():
+        if not selected_values:
+            continue
+        raw = specs.get(key)
+        if raw is None:
+            return False
+        product_value = str(raw).strip().casefold()
+        allowed = {value.strip().casefold() for value in selected_values if value.strip()}
+        if product_value not in allowed:
+            return False
+    return True
+
+
+def _filter_products_by_spec_filters(products: list[Product], spec_filters: dict[str, list[str]]) -> list[Product]:
+    if not spec_filters:
+        return products
+    return [product for product in products if _product_matches_spec_filters(product, spec_filters)]
+
+
+def _apply_search_token_filter(query, search: str | None):
+    tokens = _search_tokens(search)
+    if not tokens:
+        return query
+    if is_sqlite:
+        return query
+    return query.filter(and_(*_sql_search_token_clauses(tokens)))
+
+
+def _normalize_recommended_accessory_ids(
+    db: Session,
+    ids: list[int] | None,
+    *,
+    current_product_id: int | None = None,
+) -> list[int]:
+    if not ids:
+        return []
+    normalized: list[int] = []
+    seen: set[int] = set()
+    for raw in ids:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0:
+            continue
+        if current_product_id is not None and value == current_product_id:
+            continue
+        if value in seen:
+            continue
+        normalized.append(value)
+        seen.add(value)
+    if not normalized:
+        return []
+    existing_ids = {
+        item[0]
+        for item in db.query(Product.id).filter(Product.id.in_(normalized)).all()
+    }
+    return [value for value in normalized if value in existing_ids]
+
+
 def _apply_product_filters(
     query,
     db: Session,
@@ -132,7 +308,7 @@ def _apply_product_filters(
     if is_new is not None:
         query = query.filter(Product.is_new == is_new)
     if search:
-        query = query.filter(Product.name.ilike(f"%{search}%"))
+        query = _apply_search_token_filter(query, search)
     return query
 
 
@@ -166,9 +342,11 @@ def list_products(
     in_stock: bool | None = None,
     is_new: bool | None = None,
     search: str | None = None,
+    spec_filters: str | None = Query(default=None, description="JSON map spec name -> list of values"),
     sort: str | None = None,
     db: Session = Depends(get_db),
 ):
+    parsed_spec_filters = _parse_spec_filters(spec_filters)
     query = db.query(Product).options(joinedload(Product.category))
     query = _apply_product_filters(
         query=query,
@@ -192,8 +370,21 @@ def list_products(
         query = query.order_by(Product.reviews_count.desc())
     else:
         query = query.order_by(desc(Product.created_at))
-    total = query.count()
-    products = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    search_tokens = _search_tokens(search) if search else []
+    needs_python_post_filter = (search_tokens and is_sqlite) or bool(parsed_spec_filters)
+    if needs_python_post_filter:
+        rows = query.all()
+        if search_tokens and is_sqlite:
+            rows = _filter_products_by_tokens(rows, search_tokens)
+        if parsed_spec_filters:
+            rows = _filter_products_by_spec_filters(rows, parsed_spec_filters)
+        total = len(rows)
+        start = (page - 1) * page_size
+        products = rows[start : start + page_size]
+    else:
+        total = query.count()
+        products = query.offset((page - 1) * page_size).limit(page_size).all()
     return {
         "data": [product_to_dict(item) for item in products],
         "total": total,
@@ -203,17 +394,50 @@ def list_products(
     }
 
 
+SEARCH_POOL_MAX = 500
+
+
 @router.get("/search")
-def search_products(q: str = Query(min_length=1), page: int = 1, page_size: int = 20, db: Session = Depends(get_db)):
-    query = db.query(Product).options(joinedload(Product.category)).filter(Product.name.ilike(f"%{q}%")).order_by(desc(Product.created_at))
-    total = query.count()
-    products = query.offset((page - 1) * page_size).limit(page_size).all()
+def search_products(
+    q: str = Query(min_length=1),
+    page: int = 1,
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    tokens = _search_tokens(q)
+    full_query = _normalize_search_query(q)
+    if not tokens:
+        return {
+            "data": [],
+            "total": 0,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": 0,
+        }
+
+    base = db.query(Product).options(joinedload(Product.category)).order_by(desc(Product.created_at))
+    if is_sqlite:
+        candidates = _filter_products_by_tokens(base.all(), tokens)
+    else:
+        candidates = base.filter(and_(*_sql_search_token_clauses(tokens))).limit(SEARCH_POOL_MAX).all()
+        candidates = _filter_products_by_tokens(candidates, tokens)
+
+    scored = [
+        (product_to_dict(product), _search_relevance_score(product, tokens, full_query))
+        for product in candidates
+    ]
+    scored.sort(key=lambda item: item[1], reverse=True)
+    total = len(scored)
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_items = [item[0] for item in scored[start:end]]
+
     return {
-        "data": [product_to_dict(item) for item in products],
+        "data": page_items,
         "total": total,
         "page": page,
         "pageSize": page_size,
-        "totalPages": (total + page_size - 1) // page_size,
+        "totalPages": (total + page_size - 1) // page_size if page_size else 0,
     }
 
 
@@ -249,8 +473,10 @@ def get_product_filters_meta(
     in_stock: bool | None = None,
     is_new: bool | None = None,
     search: str | None = None,
+    spec_filters: str | None = Query(default=None, description="JSON map spec name -> list of values"),
     db: Session = Depends(get_db),
 ):
+    parsed_spec_filters = _parse_spec_filters(spec_filters)
     base_query = _apply_product_filters(
         query=db.query(Product),
         db=db,
@@ -263,26 +489,50 @@ def get_product_filters_meta(
         is_new=is_new,
         search=search,
     )
-    min_price, max_price = base_query.with_entities(func.min(Product.price), func.max(Product.price)).first() or (0, 0)
-    min_i = int(min_price or 0)
-    max_i = int(max_price or 0)
-    # Один товар даёт min == max; Radix Slider и разметка фильтра ожидают max > min.
+    category_row = db.query(Category).filter(Category.slug == category).first() if category else None
+    template = (
+        get_spec_template_for_category(name=category_row.name, slug=category_row.slug)
+        if category_row
+        else None
+    )
+
+    search_tokens = _search_tokens(search) if search else []
+
+    def _load_rows_for_meta(*, apply_spec_filters: bool) -> list[Product]:
+        rows = base_query.all()
+        if search_tokens and is_sqlite:
+            rows = _filter_products_by_tokens(rows, search_tokens)
+        if apply_spec_filters and parsed_spec_filters:
+            rows = _filter_products_by_spec_filters(rows, parsed_spec_filters)
+        return rows
+
+    # Варианты характеристик — по всей категории (без spec_filters), чтобы можно было комбинировать несколько.
+    products_for_facets = _load_rows_for_meta(apply_spec_filters=False) if template else []
+
+    rows_for_counts = _load_rows_for_meta(apply_spec_filters=True)
+    if rows_for_counts:
+        prices = [int(item.price or 0) for item in rows_for_counts]
+        min_i = min(prices)
+        max_i = max(prices)
+        brands_list = sorted({item.brand for item in rows_for_counts if item.brand})
+    else:
+        min_i = 0
+        max_i = 0
+        brands_list = []
+
     if max_i <= min_i:
         max_i = min_i + 1000
-    brand_rows = (
-        base_query.with_entities(Product.brand)
-        .filter(Product.brand.isnot(None), Product.brand != "")
-        .distinct()
-        .order_by(asc(Product.brand))
-        .all()
-    )
+
+    spec_facets = build_spec_facets(products_for_facets, template) if template else {}
+
     return ApiResponse(
         data={
-            "brands": [row[0] for row in brand_rows],
+            "brands": brands_list,
             "priceRange": {
                 "min": min_i,
                 "max": max_i,
             },
+            "specFacets": spec_facets,
         }
     )
 
@@ -457,6 +707,7 @@ def create_product(payload: ProductBase, db: Session = Depends(get_db)):
         warranty_months=payload.warrantyMonths,
         warranty_type=(payload.warrantyType or "").strip() or None,
         service_info=(payload.serviceInfo or "").strip() or None,
+        recommended_accessory_ids=_normalize_recommended_accessory_ids(db, payload.recommendedAccessoryIds) or None,
         meta_title=(payload.metaTitle or "").strip() or None,
         meta_description=(payload.metaDescription or "").strip() or None,
     )
@@ -636,6 +887,15 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
         product.warranty_type = (payload.warrantyType or "").strip() or None
     if payload.serviceInfo is not None:
         product.service_info = (payload.serviceInfo or "").strip() or None
+    if payload.recommendedAccessoryIds is not None:
+        product.recommended_accessory_ids = (
+            _normalize_recommended_accessory_ids(
+                db,
+                payload.recommendedAccessoryIds,
+                current_product_id=product.id,
+            )
+            or None
+        )
     if payload.metaTitle is not None:
         product.meta_title = (payload.metaTitle or "").strip() or None
     if payload.metaDescription is not None:
