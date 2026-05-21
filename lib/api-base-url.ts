@@ -25,5 +25,7 @@ export function getApiBaseUrl(): string {
     return pub
   }
 
-  return 'http://backend:8000/api'
+  // Относительный /api на сервере без API_URL_INTERNAL (например `next build` в Docker).
+  // Не используем hostname backend — его нет на этапе сборки образа.
+  return 'http://127.0.0.1:8000/api'
 }
