@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Search, User, ShoppingCart, Menu, Phone, X, Heart } from 'lucide-react'
+import { Search, User, ShoppingCart, Menu, X, Heart } from 'lucide-react'
+import { StorePhones } from '@/components/layout/store-phones'
+import { STORE_WHATSAPP_DIGITS } from '@/lib/store-contacts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -82,13 +84,11 @@ export function Header() {
               ))}
             </nav>
             <div className="flex items-center gap-4 ml-auto">
-              <a
-                href="tel:+79268023497"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Phone className="h-3.5 w-3.5" />
-                <span>+7(926)802-34-97</span>
-              </a>
+              <StorePhones
+                compact
+                showIcon
+                linkClassName="text-muted-foreground hover:text-foreground"
+              />
               <span className="hidden sm:inline text-muted-foreground">|</span>
               <a
                 href="mailto:tele-makc@yandex.ru"
@@ -97,7 +97,7 @@ export function Header() {
                 tele-makc@yandex.ru
               </a>
               <a
-                href="https://wa.me/79268023497"
+                href={`https://wa.me/${STORE_WHATSAPP_DIGITS}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-green-600 hover:text-green-700 transition-colors"
@@ -158,13 +158,12 @@ export function Header() {
                   </div>
                 </nav>
                 <div className="p-4 border-t">
-                  <a
-                    href="tel:+79268023497"
-                    className="flex items-center gap-2 text-muted-foreground"
-                  >
-                    <Phone className="h-4 w-4" />
-                    +7(926)802-34-97
-                  </a>
+                  <StorePhones
+                    variant="stack"
+                    compact
+                    showIcon
+                    linkClassName="text-muted-foreground"
+                  />
                 </div>
               </div>
             </SheetContent>

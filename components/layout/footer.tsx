@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Phone } from 'lucide-react'
+import { StorePhones } from '@/components/layout/store-phones'
 import { categoriesApi } from '@/lib/api'
 import type { Category } from '@/types'
 
@@ -72,13 +72,12 @@ export function Footer() {
               <span className="text-xl md:text-2xl font-bold">TELE-MAKC</span>
             </Link>
             <div className="space-y-2 text-sm text-background/70">
-              <a
-                href="tel:+79268023497"
-                className="flex items-center gap-2 hover:text-background transition-colors"
-              >
-                <Phone className="h-4 w-4 flex-shrink-0" />
-                <span>+7(926)802-34-97</span>
-              </a>
+              <StorePhones
+                variant="stack"
+                compact
+                showIcon
+                linkClassName="hover:text-background"
+              />
               <div className="text-xs">интернет-магазин</div>
             </div>
           </div>

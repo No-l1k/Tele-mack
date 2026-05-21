@@ -147,14 +147,13 @@ export default function CartPage() {
                           <QuantitySelector
                             value={item.quantity}
                             onChange={(value) => updateQuantity(item.product.id, value)}
-                            max={item.product.quantity}
                             size="sm"
                           />
                         </div>
                         
                         <div className="flex items-center gap-3 md:gap-4 mt-auto pt-2 text-xs md:text-sm text-muted-foreground">
                           <button
-                            onClick={() => toggleFavorite(item.product.id)}
+                            onClick={() => toggleFavorite(item.product.id, item.product)}
                             className="flex items-center gap-1 hover:text-primary transition-colors"
                           >
                             <Heart className="h-3 w-3" />
@@ -180,7 +179,6 @@ export default function CartPage() {
                         <QuantitySelector
                           value={item.quantity}
                           onChange={(value) => updateQuantity(item.product.id, value)}
-                          max={item.product.quantity}
                           size="sm"
                         />
                       </div>

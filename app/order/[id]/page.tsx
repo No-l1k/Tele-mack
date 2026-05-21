@@ -12,6 +12,7 @@ import {
   formatOrderStatus,
   formatPaymentMethod,
 } from '@/lib/formatters'
+import { STORE_PHONE_PRIMARY } from '@/lib/store-contacts'
 import { fetchPublicOrder } from '@/lib/server-store'
 import { notFound } from 'next/navigation'
 
@@ -85,7 +86,7 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
                   </p>
                   <div className="flex gap-3">
                     <a
-                      href="viber://chat?number=79268023497"
+                      href={`viber://chat?number=${STORE_PHONE_PRIMARY.digits}`}
                       className="flex items-center justify-center w-12 h-12 rounded-full bg-purple-100 text-purple-600 hover:bg-purple-200 transition-colors"
                     >
                       <MessageCircle className="h-6 w-6" />

@@ -23,7 +23,15 @@ import { resolveMediaUrl } from '@/lib/media'
 import { CARD_SURCHARGE_RATE, calculateDeliveryCost } from '@/lib/pricing'
 import { saveOrderAccess } from '@/lib/order-access'
 import { isCompleteRuPhone } from '@/lib/phone'
-import { DEFAULT_MIN_ORDER_AMOUNT_RUB } from '@/lib/constants'
+import {
+  DEFAULT_MIN_ORDER_AMOUNT_RUB,
+  resolveMinOrderAmountRub,
+} from '@/lib/constants'
+import {
+  LEGACY_TV_CHECKOUT_SERVICE_IDS,
+  buildTvCheckoutServices,
+  isDynamicTvCheckoutServiceId,
+} from '@/lib/tv-checkout-services'
 import type { DeliveryMethod, PaymentMethod } from '@/types'
 
 export default function CheckoutPage() {
@@ -48,7 +56,7 @@ export default function CheckoutPage() {
   
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [checkoutServices, setCheckoutServices] = useState<CheckoutService[]>([])
+  const [storeCheckoutServices, setStoreCheckoutServices] = useState<CheckoutService[]>([])
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
   const [minOrderSum, setMinOrderSum] = useState(DEFAULT_MIN_ORDER_AMOUNT_RUB)
 
@@ -61,16 +69,14 @@ export default function CheckoutPage() {
         const enabled = allServices
           .filter((service) => service && service.enabled)
           .sort((a, b) => a.sortOrder - b.sortOrder)
-        const rawMin = response.data.deliveryInfo?.moscowMinSum
-        const nextMin =
-          typeof rawMin === 'number' && rawMin > 0 ? rawMin : DEFAULT_MIN_ORDER_AMOUNT_RUB
+        const nextMin = resolveMinOrderAmountRub(response.data.deliveryInfo?.moscowMinSum)
         if (!cancelled) {
-          setCheckoutServices(enabled)
+          setStoreCheckoutServices(enabled)
           setMinOrderSum(nextMin)
         }
       } catch {
         if (!cancelled) {
-          setCheckoutServices([])
+          setStoreCheckoutServices([])
           setMinOrderSum(DEFAULT_MIN_ORDER_AMOUNT_RUB)
         }
       }
@@ -79,6 +85,24 @@ export default function CheckoutPage() {
       cancelled = true
     }
   }, [])
+
+  const tvCheckoutServices = useMemo(() => buildTvCheckoutServices(items), [items])
+
+  const legacyTvServiceIds = useMemo(() => new Set<string>(LEGACY_TV_CHECKOUT_SERVICE_IDS), [])
+
+  const checkoutServices = useMemo(() => {
+    const storeServices = storeCheckoutServices.filter((service) => !legacyTvServiceIds.has(service.id))
+    return [...tvCheckoutServices, ...storeServices].sort((a, b) => a.sortOrder - b.sortOrder)
+  }, [legacyTvServiceIds, storeCheckoutServices, tvCheckoutServices])
+
+  const availableServiceIds = useMemo(
+    () => new Set(checkoutServices.map((service) => service.id)),
+    [checkoutServices]
+  )
+
+  useEffect(() => {
+    setSelectedServiceIds((prev) => prev.filter((id) => availableServiceIds.has(id)))
+  }, [availableServiceIds])
 
   // Calculate costs
   const deliveryCost = calculateDeliveryCost(total, formData.deliveryMethod)
@@ -242,7 +266,7 @@ export default function CheckoutPage() {
                     <CardTitle>Контактные данные</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div>
+                    <div className="space-y-2">
                       <Label htmlFor="phone">Контактный телефон *</Label>
                       <PhoneInput
                         id="phone"
@@ -258,7 +282,7 @@ export default function CheckoutPage() {
                       </p>
                     </div>
                     
-                    <div>
+                    <div className="space-y-2">
                       <Label htmlFor="name">Контактное лицо (ФИО) *</Label>
                       <Input
                         id="name"
@@ -272,7 +296,7 @@ export default function CheckoutPage() {
                       )}
                     </div>
                     
-                    <div>
+                    <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
                       <Input
                         id="email"
@@ -295,7 +319,7 @@ export default function CheckoutPage() {
                     <CardTitle>Доставка</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div>
+                    <div className="space-y-2">
                       <Label htmlFor="city">Населенный пункт *</Label>
                       <Input
                         id="city"
@@ -342,7 +366,7 @@ export default function CheckoutPage() {
 
                     {formData.deliveryMethod === 'courier' && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                        <div className="sm:col-span-2">
+                        <div className="sm:col-span-2 space-y-2">
                           <Label htmlFor="street">Улица *</Label>
                           <Input
                             id="street"
@@ -355,7 +379,7 @@ export default function CheckoutPage() {
                             <p className="text-sm text-destructive mt-1">{errors.street}</p>
                           )}
                         </div>
-                        <div>
+                        <div className="space-y-2">
                           <Label htmlFor="house">Дом *</Label>
                           <Input
                             id="house"
@@ -368,7 +392,7 @@ export default function CheckoutPage() {
                             <p className="text-sm text-destructive mt-1">{errors.house}</p>
                           )}
                         </div>
-                        <div>
+                        <div className="space-y-2">
                           <Label htmlFor="apartment">Квартира</Label>
                           <Input
                             id="apartment"
@@ -380,7 +404,7 @@ export default function CheckoutPage() {
                       </div>
                     )}
                     
-                    <div>
+                    <div className="space-y-2">
                       <Label htmlFor="comment">Комментарий к заказу</Label>
                       <Textarea
                         id="comment"
@@ -412,7 +436,9 @@ export default function CheckoutPage() {
                             />
                             <div>
                               <Label htmlFor={serviceId} className="cursor-pointer">
-                                {service.name} ({formatPrice(service.price)})
+                                {isDynamicTvCheckoutServiceId(service.id)
+                                  ? service.name
+                                  : `${service.name} (${formatPrice(service.price)})`}
                               </Label>
                               {service.description && (
                                 <p className="text-sm text-muted-foreground">{service.description}</p>

@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Heart } from 'lucide-react'
 import { Header } from '@/components/layout/header'
@@ -9,35 +8,12 @@ import { Breadcrumbs } from '@/components/ui/breadcrumbs'
 import { Button } from '@/components/ui/button'
 import { ProductGrid } from '@/components/catalog/product-grid'
 import { useFavorites } from '@/context/favorites-context'
-import { usersApi } from '@/lib/api'
-import type { Product } from '@/types'
 
 export default function FavoritesPage() {
-  const { favorites } = useFavorites()
-  const [products, setProducts] = useState<Product[]>([])
+  const { favorites, favoriteProducts, isLoadingProducts } = useFavorites()
 
-  useEffect(() => {
-    let cancelled = false
-
-    ;(async () => {
-      try {
-        const response = await usersApi.getFavorites()
-        if (!cancelled) {
-          setProducts(response.data)
-        }
-      } catch {
-        if (!cancelled) {
-          setProducts([])
-        }
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const favoriteProducts = products.filter((product) => favorites.includes(product.id))
+  const hasFavorites = favorites.length > 0
+  const showGrid = favoriteProducts.length > 0
 
   return (
     <>
@@ -54,8 +30,10 @@ export default function FavoritesPage() {
 
           <h1 className="text-2xl font-bold mt-6 mb-8">Избранное</h1>
 
-          {favoriteProducts.length > 0 ? (
+          {showGrid ? (
             <ProductGrid products={favoriteProducts} columns={4} />
+          ) : hasFavorites && isLoadingProducts ? (
+            <p className="text-muted-foreground">Загрузка товаров...</p>
           ) : (
             <div className="text-center py-16">
               <Heart className="h-20 w-20 text-muted-foreground/50 mx-auto mb-6" />

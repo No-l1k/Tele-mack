@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
 import { settingsApi, type HeroBanner, type StoreSettings } from '@/lib/api'
+import { resolveMinOrderAmountRub } from '@/lib/constants'
 import { resolveMediaUrl } from '@/lib/media'
 import { Trash2 } from 'lucide-react'
 
@@ -52,7 +53,15 @@ export default function AdminSettingsPage() {
     ;(async () => {
       try {
         const response = await settingsApi.get()
-        setSettings({ ...response.data, heroBanners: normalizeBanners(response.data.heroBanners) })
+        const data = response.data
+        setSettings({
+          ...data,
+          heroBanners: normalizeBanners(data.heroBanners),
+          deliveryInfo: {
+            ...data.deliveryInfo,
+            moscowMinSum: resolveMinOrderAmountRub(data.deliveryInfo?.moscowMinSum),
+          },
+        })
       } finally {
         setIsLoading(false)
       }
@@ -283,6 +292,12 @@ export default function AdminSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Дополнительные услуги на Checkout</CardTitle>
+          <p className="text-sm text-muted-foreground font-normal">
+            Общие услуги для всех заказов (кронштейн, расширенная гарантия 2/3 года и т.д.).
+            Для телевизоров проверка пикселей, установка и гарантия на 1 год добавляются автоматически
+            по каждому ТВ в корзине — их здесь настраивать не нужно.
+            После удаления услуги нажмите «Сохранить услуги».
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           {(settings.checkoutServices?.length ?? 0) > 0 ? (

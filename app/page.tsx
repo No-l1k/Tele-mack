@@ -11,6 +11,7 @@ import {
   getNewProducts,
 } from '@/lib/data/catalog'
 import Link from 'next/link'
+import { STORE_PHONES, STORE_WHATSAPP_DIGITS } from '@/lib/store-contacts'
 import { Truck, Shield, CreditCard, Headphones } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -121,12 +122,20 @@ export default async function HomePage() {
               Наши специалисты помогут подобрать идеальный телевизор под ваши потребности и бюджет. 
               Звоните или пишите в WhatsApp!
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3">
+              {STORE_PHONES.map((phone) => (
+                <Button
+                  key={phone.tel}
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto border-primary-foreground/30 text-black hover:bg-primary"
+                >
+                  <a href={`tel:${phone.tel}`}>{phone.display}</a>
+                </Button>
+              ))}
               <Button asChild size="lg" variant="outline" className="w-full sm:w-auto border-primary-foreground/30 text-black hover:bg-primary">
-                <a href="tel:+79268023497">Позвонить</a>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="w-full sm:w-auto border-primary-foreground/30 text-black hover:bg-primary">
-                <a href="https://wa.me/79268023497" target="_blank" rel="noopener noreferrer">
+                <a href={`https://wa.me/${STORE_WHATSAPP_DIGITS}`} target="_blank" rel="noopener noreferrer">
                   WhatsApp
                 </a>
               </Button>

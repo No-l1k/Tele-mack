@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -27,6 +27,14 @@ import { resolveMediaUrl } from '@/lib/media'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
 import { normalizeProductSlug, normalizeProductSlugInput } from '@/lib/admin-slug'
 import { htmlToText } from '@/lib/rich-text'
+import { ProductSeoDialog } from '@/components/admin/product-seo-dialog'
+import { readProductSeoFromForm } from '@/components/admin/read-product-seo-form'
+import {
+  buildProductSeoPreview,
+  normalizeMetaDescriptionForSave,
+  normalizeMetaTitleForSave,
+  type ProductSeoInput,
+} from '@/lib/product-seo'
 
 const normalizeBrand = (value: string) =>
   value
@@ -71,6 +79,10 @@ export default function EditProductPage() {
   const [slug, setSlug] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [additionalOpen, setAdditionalOpen] = useState(false)
+  const [seoOpen, setSeoOpen] = useState(false)
+  const [metaTitle, setMetaTitle] = useState('')
+  const [metaDescription, setMetaDescription] = useState('')
+  const [seoFormTick, setSeoFormTick] = useState(0)
   const serviceInfoEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
 
   useEffect(() => {
@@ -98,6 +110,8 @@ export default function EditProductPage() {
             value: String(value),
           }))
         setSpecRows(rows.length > 0 ? rows : [{ id: 'spec-1', key: '', value: '' }])
+        setMetaTitle(loadedProduct.metaTitle || '')
+        setMetaDescription(loadedProduct.metaDescription || '')
       }
       setCategories(categoriesResponse?.data ?? [])
       setIsLoading(false)
@@ -169,8 +183,17 @@ export default function EditProductPage() {
     }
     setIsSaving(true)
     const payload = new FormData(event.currentTarget)
+    const selectedCategoryId = Number(categoryId || payload.get('categoryId') || product.categoryId)
+    const selectedCategory =
+      categories.find((category) => String(category.id) === String(selectedCategoryId)) ?? null
+    const seoInputForSave = readProductSeoFromForm('product-edit-form', {
+      name: String(payload.get('name') || product.name),
+      slug: normalizedSlug,
+      price: Number(payload.get('price') || product.price),
+      brand: normalizeBrand(String(payload.get('brand') || product.brand)),
+      categoryName: selectedCategory?.name,
+    })
     try {
-      const selectedCategoryId = Number(categoryId || payload.get('categoryId') || product.categoryId)
       const specsFromRows = Object.fromEntries(
         specRows
           .map((row) => [row.key.trim(), row.value.trim()] as const)
@@ -184,10 +207,8 @@ export default function EditProductPage() {
         brand: normalizeBrand(String(payload.get('brand') || product.brand)),
         price: Number(payload.get('price') || product.price),
         oldPrice: payload.get('oldPrice') ? Number(payload.get('oldPrice')) : undefined,
-        quantity: Number(payload.get('quantity') || product.quantity),
         categoryId: selectedCategoryId,
-        categorySlug:
-          categories.find((category) => String(category.id) === String(selectedCategoryId))?.slug || product.categorySlug,
+        categorySlug: selectedCategory?.slug || product.categorySlug,
         sku: String(payload.get('sku') || product.sku || '').trim() || undefined,
         gtin: String(payload.get('gtin') || product.gtin || '').trim() || undefined,
         specs: {
@@ -204,8 +225,8 @@ export default function EditProductPage() {
         warrantyType: String(payload.get('warrantyType') || product.warrantyType || '').trim() || undefined,
         serviceInfo: String(payload.get('serviceInfo') ?? serviceInfoHtml).trim() || undefined,
         recommendedAccessoryIds: recommendedAccessoryIds.map((id) => Number(id)),
-        metaTitle: String(payload.get('metaTitle') || product.metaTitle || '').trim() || undefined,
-        metaDescription: String(payload.get('metaDescription') || product.metaDescription || '').trim() || undefined,
+        metaTitle: normalizeMetaTitleForSave(seoInputForSave, metaTitle),
+        metaDescription: normalizeMetaDescriptionForSave(seoInputForSave, metaDescription),
       })
       toast.success('Товар сохранён')
       router.push('/admin/products')
@@ -233,6 +254,37 @@ export default function EditProductPage() {
     await reloadProduct()
   }
 
+  const selectedCategory = useMemo(
+    () =>
+      categories.find((category) => String(category.id) === String(categoryId || product?.categoryId)) ??
+      null,
+    [categories, categoryId, product?.categoryId]
+  )
+
+  const seoFallback: ProductSeoInput = useMemo(
+    () => ({
+      name: product?.name ?? '',
+      slug: slug || product?.slug || '',
+      price: product?.price ?? 0,
+      brand: product?.brand ?? '',
+      categoryName: selectedCategory?.name,
+    }),
+    [product, slug, selectedCategory]
+  )
+
+  const seoInputLive = useMemo(
+    () =>
+      seoOpen && product
+        ? readProductSeoFromForm('product-edit-form', seoFallback)
+        : seoFallback,
+    [seoOpen, product, seoFallback, seoFormTick]
+  )
+
+  const seoPreviewShort = useMemo(
+    () => buildProductSeoPreview(seoInputLive, metaTitle, metaDescription).title,
+    [seoInputLive, metaTitle, metaDescription]
+  )
+
   if (isLoading) return <p className="text-muted-foreground">Загрузка...</p>
   if (!product) return <p className="text-muted-foreground">Товар не найден</p>
 
@@ -253,12 +305,17 @@ export default function EditProductPage() {
     setRecommendedAccessoryIds((prev) => prev.filter((item) => item !== normalizedId))
   }
 
-  const selectedCategory = categories.find((category) => String(category.id) === String(categoryId || product.categoryId)) ?? null
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4"><Link href="/admin/products"><Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button></Link><h1 className="text-2xl font-bold">Редактирование товара</h1></div>
-      <form onSubmit={handleSave} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <form
+        id="product-edit-form"
+        onSubmit={handleSave}
+        onInput={() => {
+          if (seoOpen) setSeoFormTick((t) => t + 1)
+        }}
+        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]"
+      >
         <div className="space-y-6">
           <Card className="border-blue-200/70 bg-blue-50/30 shadow-sm">
             <CardHeader className="border-b bg-blue-100/40">
@@ -395,14 +452,63 @@ export default function EditProductPage() {
           </Card>
         </div>
         <div className="space-y-6 xl:sticky xl:top-20 xl:self-start">
+          <Card className="shadow-sm border-emerald-200/70">
+            <CardHeader>
+              <CardTitle>Поисковые сервисы (SEO)</CardTitle>
+              <p className="text-xs text-muted-foreground font-normal">
+                Заголовок и описание для Яндекса и Google.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm line-clamp-2 text-muted-foreground">{seoPreviewShort || 'Заполните название товара'}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setSeoFormTick((t) => t + 1)
+                  setSeoOpen(true)
+                }}
+              >
+                Настроить SEO
+              </Button>
+              <input type="hidden" name="metaTitle" value={metaTitle} />
+              <input type="hidden" name="metaDescription" value={metaDescription} />
+            </CardContent>
+          </Card>
+
+          <ProductSeoDialog
+            open={seoOpen}
+            onOpenChange={(open) => {
+              setSeoOpen(open)
+              if (open) setSeoFormTick((t) => t + 1)
+            }}
+            seoInput={seoInputLive}
+            metaTitle={metaTitle}
+            metaDescription={metaDescription}
+            onApply={(title, description) => {
+              setMetaTitle(title)
+              setMetaDescription(description)
+            }}
+          />
+
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle>Цена и остатки</CardTitle>
+              <CardTitle>Цена и наличие</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <Input type="number" name="price" defaultValue={product.price} required />
               <Input type="number" name="oldPrice" defaultValue={product.oldPrice} />
-              <Input type="number" name="quantity" defaultValue={product.quantity} required />
+              <select
+                name="stockStatus"
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                defaultValue={product.stockStatus || 'in_stock'}
+              >
+                <option value="in_stock">В наличии</option>
+                <option value="low_stock">Мало</option>
+                <option value="preorder">Под заказ</option>
+                <option value="out_of_stock">Нет в наличии</option>
+              </select>
               <select
                 name="ratingMode"
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -422,16 +528,6 @@ export default function EditProductPage() {
                   Сейчас mode=auto: рейтинг и отзывы рассчитываются автоматически ({product.rating} / {product.reviewsCount}).
                 </p>
               )}
-              <select
-                name="stockStatus"
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                defaultValue={product.stockStatus || 'in_stock'}
-              >
-                <option value="in_stock">В наличии</option>
-                <option value="low_stock">Мало</option>
-                <option value="preorder">Под заказ</option>
-                <option value="out_of_stock">Нет в наличии</option>
-              </select>
               <Input name="sku" placeholder="SKU / артикул" defaultValue={product.sku} />
               <Input type="number" name="warrantyMonths" placeholder="Гарантия, мес" min={0} step={1} defaultValue={product.warrantyMonths} />
               <Input name="warrantyType" placeholder="Тип гарантии (например, официальная)" defaultValue={product.warrantyType} />
@@ -446,14 +542,6 @@ export default function EditProductPage() {
                   <div className="space-y-2">
                     <Label htmlFor="gtin-edit">Штрихкод GTIN / EAN</Label>
                     <Input id="gtin-edit" name="gtin" placeholder="Необязательно, 8–14 цифр" defaultValue={product.gtin} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="meta-title-edit">Заголовок для поиска (meta title)</Label>
-                    <Input id="meta-title-edit" name="metaTitle" placeholder="Необязательно" maxLength={255} defaultValue={product.metaTitle} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="meta-desc-edit">Краткое описание для поиска</Label>
-                    <Textarea id="meta-desc-edit" name="metaDescription" placeholder="Необязательно" rows={3} maxLength={500} defaultValue={product.metaDescription} />
                   </div>
                 </CollapsibleContent>
               </Collapsible>

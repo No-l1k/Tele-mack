@@ -35,8 +35,8 @@ def _create_product(headers: dict[str, str]) -> int:
         "categorySlug": category_payload["slug"],
         "brand": "TestBrand",
         "specs": {"images": ["/images/placeholders/product.svg"]},
-        "quantity": 5,
         "inStock": True,
+        "stockStatus": "in_stock",
         "isNew": False,
     }
     product_response = client.post("/api/products", headers=headers, json=product_payload)
@@ -82,4 +82,4 @@ def test_products_export_requires_admin_and_returns_csv():
     assert response.headers["content-type"].startswith("text/csv")
     assert response.content.startswith(b"\xef\xbb\xbf")
     text = response.content.decode("utf-8-sig")
-    assert "name;price;category;stock;description;images" in text
+    assert "name;price;category;stockStatus;description;images" in text

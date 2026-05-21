@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { RefreshCw, Home, AlertTriangle } from 'lucide-react'
+import { STORE_PHONES } from '@/lib/store-contacts'
 
 export default function Error({
   error,
@@ -56,7 +57,7 @@ export default function Error({
               Если проблема повторяется, свяжитесь с нами:
             </p>
             <p className="text-sm font-medium mt-2">
-              +7(926)802-34-97 | tele-makc@yandex.ru
+              {STORE_PHONES.map((p) => p.displayCompact).join(' · ')} · tele-makc@yandex.ru
             </p>
           </div>
         </div>

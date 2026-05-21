@@ -24,7 +24,7 @@ from ..schemas import (
     ReviewCreateIn,
 )
 from ..services.csv_export import excel_csv_response
-from ..services.products import product_to_dict
+from ..services.products import product_in_stock_from_status, product_to_dict
 
 router = APIRouter(prefix="/products", tags=["products"])
 VALID_STOCK_STATUSES = {"in_stock", "low_stock", "preorder", "out_of_stock"}
@@ -556,14 +556,14 @@ def export_products(db: Session = Depends(get_db)):
                 payload["name"],
                 payload["price"],
                 payload.get("categorySlug", ""),
-                payload["quantity"],
+                payload["stockStatus"],
                 payload["description"],
                 "|".join(payload.get("images", [])),
             ]
 
     return excel_csv_response(
         "products.csv",
-        ["name", "price", "category", "stock", "description", "images"],
+        ["name", "price", "category", "stockStatus", "description", "images"],
         product_rows(),
     )
 
@@ -675,8 +675,6 @@ def create_product(payload: ProductBase, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Category not found")
     if payload.price < 0:
         raise HTTPException(status_code=400, detail="Price must be >= 0")
-    if payload.quantity < 0:
-        raise HTTPException(status_code=400, detail="Quantity must be >= 0")
     slug = _validate_slug(payload.slug)
     rating_mode = _validate_rating_mode(payload.ratingMode)
 
@@ -697,9 +695,8 @@ def create_product(payload: ProductBase, db: Session = Depends(get_db)):
         sku=(payload.sku or "").strip() or None,
         gtin=gtin_normalized,
         specs=clean_specs,
-        in_stock=stock_status in {"in_stock", "low_stock"},
+        in_stock=product_in_stock_from_status(stock_status),
         stock_status=stock_status,
-        quantity=payload.quantity,
         is_new=payload.isNew,
         rating_mode=rating_mode,
         rating=payload.rating if rating_mode == "manual" else 0,
@@ -860,16 +857,12 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
         if existing_images:
             clean_specs["images"] = existing_images
         product.specs = clean_specs
-    if payload.inStock is not None:
-        product.in_stock = payload.inStock
     if payload.stockStatus is not None:
         status = _validate_stock_status(payload.stockStatus)
         product.stock_status = status
-        product.in_stock = status in {"in_stock", "low_stock"}
-    if payload.quantity is not None:
-        if payload.quantity < 0:
-            raise HTTPException(status_code=400, detail="Quantity must be >= 0")
-        product.quantity = payload.quantity
+        product.in_stock = product_in_stock_from_status(status)
+    elif payload.inStock is not None:
+        product.in_stock = payload.inStock
     if payload.isNew is not None:
         product.is_new = payload.isNew
     if payload.ratingMode is not None:
@@ -902,9 +895,6 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
         product.meta_description = (payload.metaDescription or "").strip() or None
     if payload.price is not None and payload.price < 0:
         raise HTTPException(status_code=400, detail="Price must be >= 0")
-    if product.quantity <= 0 and product.stock_status == "in_stock":
-        product.in_stock = False
-        product.stock_status = "out_of_stock"
     try:
         db.commit()
     except IntegrityError:

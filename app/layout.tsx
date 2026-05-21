@@ -7,6 +7,9 @@ import { AuthProvider } from '@/context/auth-context'
 import { Toaster } from '@/components/ui/sonner'
 import { CookieConsentPopup } from '@/components/common/cookie-consent-popup'
 import { siteConfig } from '@/lib/site'
+import { fetchPublicSettings } from '@/lib/server-store'
+import { buildSiteJsonLdGraph } from '@/lib/json-ld'
+import { JsonLdScript } from '@/components/seo/json-ld'
 import './globals.css'
 
 const inter = Inter({ 
@@ -56,10 +59,16 @@ export const metadata: Metadata = {
       follow: true,
     },
   },
+  manifest: '/site.webmanifest',
   icons: {
-    icon: [{ url: '/favicon.png', type: 'image/png', sizes: '32x32' }],
-    shortcut: '/favicon.png',
-    apple: '/apple-icon.png',
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-16x16.png', type: 'image/png', sizes: '16x16' },
+      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/android-chrome-192x192.png', type: 'image/png', sizes: '192x192' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
   },
 }
 
@@ -73,15 +82,24 @@ export const viewport: Viewport = {
   ],
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
   const enableVercelAnalytics = process.env.NEXT_PUBLIC_ENABLE_VERCEL_ANALYTICS === 'true'
+  const settings = await fetchPublicSettings()
+  const siteJsonLd = buildSiteJsonLdGraph({
+    name: settings?.name,
+    phone: settings?.phone,
+    email: settings?.email,
+    address: settings?.address,
+  })
+
   return (
     <html lang="ru" data-scroll-behavior="smooth" className={`${inter.variable} ${geistMono.variable} bg-background`}>
       <body className="font-sans antialiased min-h-screen flex flex-col">
+        <JsonLdScript data={siteJsonLd} />
         <AuthProvider>
           <CartProvider>
             <FavoritesProvider>

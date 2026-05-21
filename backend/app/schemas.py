@@ -69,7 +69,6 @@ class ProductBase(BaseModel):
     specs: dict = {}
     inStock: bool = True
     stockStatus: str = "in_stock"
-    quantity: int = 0
     isNew: bool = False
     ratingMode: str = "manual"
     rating: float = Field(default=4.8, ge=0, le=5.0)
@@ -107,7 +106,6 @@ class ProductUpdateIn(BaseModel):
     specs: dict | None = None
     inStock: bool | None = None
     stockStatus: str | None = None
-    quantity: int | None = None
     isNew: bool | None = None
     ratingMode: str | None = None
     rating: float | None = Field(default=None, ge=0, le=5.0)

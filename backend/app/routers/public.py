@@ -7,8 +7,11 @@ from ..database import get_db
 from ..models import Order, OrderItem, Product, Setting
 from ..schemas import ApiResponse, ContactRequestIn, QuickOrderCreateIn
 from ..services.notifications import email_notifications_enabled, send_contact_request_email, send_new_order_email
-from ..services.store_settings import min_order_subtotal_rub
+from ..services.order_numbers import allocate_next_order_id
+from ..services.products import product_available_for_order
+from ..services.store_settings import min_order_subtotal_rub, normalize_delivery_info
 from ..pricing_constants import COURIER_DELIVERY_COST_RUB
+from ..services.checkout_services import DEFAULT_CHECKOUT_SERVICES, normalize_checkout_services
 
 router = APIRouter(prefix="/public", tags=["public"])
 logger = logging.getLogger(__name__)
@@ -23,48 +26,7 @@ DEFAULT_STORE_SETTINGS = {
     "paymentMethods": {"cash": True, "card": True, "cardSurcharge": 15, "pickup": True},
     "social": {"whatsapp": "+79000000000", "telegram": "@telemakc"},
     "heroBanners": [],
-    "checkoutServices": [
-        {
-            "id": "pixel-check",
-            "name": "Проверка на битые пиксели",
-            "price": 1500,
-            "description": "Проверка экрана на наличие дефектных пикселей перед выдачей.",
-            "enabled": True,
-            "sortOrder": 1,
-        },
-        {
-            "id": "installation",
-            "name": "Установка телевизора",
-            "price": 3000,
-            "description": "Профессиональная установка и базовая настройка телевизора.",
-            "enabled": True,
-            "sortOrder": 2,
-        },
-        {
-            "id": "bracket-selection",
-            "name": "Подбор кронштейна для ТВ",
-            "price": 0,
-            "description": "подробнее",
-            "enabled": True,
-            "sortOrder": 3,
-        },
-        {
-            "id": "extended-warranty-2y",
-            "name": "Расширенная гарантия на 2 года",
-            "price": 1843,
-            "description": "Все заботы по ремонту мы возьмем на себя в течение 2 лет. Если товар не подлежит ремонту, обменяем его на новый той же модели.",
-            "enabled": True,
-            "sortOrder": 4,
-        },
-        {
-            "id": "extended-warranty-3y",
-            "name": "Расширенная гарантия на 3 года",
-            "price": 2765,
-            "description": "Все заботы по ремонту мы возьмем на себя в течение 3 лет. Если товар не подлежит ремонту, обменяем его на новый той же модели.",
-            "enabled": True,
-            "sortOrder": 5,
-        },
-    ],
+    "checkoutServices": DEFAULT_CHECKOUT_SERVICES,
 }
 
 
@@ -86,37 +48,6 @@ def _normalize_hero_banners(value: object) -> list[dict[str, str]]:
     return normalized
 
 
-def _normalize_checkout_services(value: object) -> list[dict[str, object]]:
-    def _normalize_list(raw: object) -> list[dict[str, object]]:
-        items = raw if isinstance(raw, list) else []
-        normalized_list: list[dict[str, object]] = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            service_id = str(item.get("id", "")).strip()
-            name = str(item.get("name", "")).strip()
-            if not service_id or not name:
-                continue
-            normalized_list.append(
-                {
-                    "id": service_id,
-                    "name": name,
-                    "price": max(int(item.get("price", 0) or 0), 0),
-                    "description": str(item.get("description", "")).strip() or None,
-                    "enabled": bool(item.get("enabled", True)),
-                    "sortOrder": int(item.get("sortOrder", 0) or 0),
-                }
-            )
-        return normalized_list
-
-    default_services = _normalize_list(DEFAULT_STORE_SETTINGS["checkoutServices"])
-    normalized = _normalize_list(value)
-    merged: dict[str, dict[str, object]] = {str(service["id"]): service for service in default_services}
-    for service in normalized:
-        merged[str(service["id"])] = service
-    return sorted(list(merged.values()), key=lambda service: int(service["sortOrder"]))
-
-
 @router.get("/settings", response_model=ApiResponse)
 def get_public_store_settings(db: Session = Depends(get_db)):
     row = db.query(Setting).filter(Setting.key == "store").first()
@@ -126,9 +57,13 @@ def get_public_store_settings(db: Session = Depends(get_db)):
         db.commit()
         db.refresh(row)
     settings_data = dict(row.value or {})
+    normalized_delivery = normalize_delivery_info(settings_data.get("deliveryInfo"))
+    if settings_data.get("deliveryInfo") != normalized_delivery:
+        settings_data["deliveryInfo"] = normalized_delivery
     settings_data["heroBanners"] = _normalize_hero_banners(settings_data.get("heroBanners"))
-    settings_data["checkoutServices"] = _normalize_checkout_services(
-        settings_data.get("checkoutServices", DEFAULT_STORE_SETTINGS["checkoutServices"])
+    raw_services = settings_data.get("checkoutServices")
+    settings_data["checkoutServices"] = normalize_checkout_services(
+        raw_services if "checkoutServices" in settings_data else None
     )
     if settings_data != row.value:
         row.value = settings_data
@@ -162,8 +97,8 @@ def create_quick_order(payload: QuickOrderCreateIn, db: Session = Depends(get_db
     product = db.query(Product).filter(Product.id == payload.productId).with_for_update().first()
     if not product:
         raise HTTPException(status_code=404, detail="Товар не найден")
-    if not product.in_stock or product.quantity < payload.quantity:
-        raise HTTPException(status_code=400, detail="Товара нет в достаточном количестве")
+    if not product_available_for_order(product):
+        raise HTTPException(status_code=400, detail="Товар сейчас недоступен для заказа")
 
     quantity = payload.quantity
     line_total = int(product.price) * quantity
@@ -173,16 +108,12 @@ def create_quick_order(payload: QuickOrderCreateIn, db: Session = Depends(get_db
             status_code=400,
             detail=f"Минимальная сумма заказа {min_sum} руб.",
         )
-    product.quantity -= quantity
-    if product.quantity <= 0:
-        product.quantity = 0
-        product.in_stock = False
-
     images = (product.specs or {}).get("images", [])
     comment = (payload.comment or "").strip()
     order_comment = f"Покупка в 1 клик. Комментарий клиента: {comment}" if comment else "Покупка в 1 клик"
 
     order = Order(
+        id=allocate_next_order_id(db),
         status="pending",
         total=line_total + COURIER_DELIVERY_COST_RUB,
         payment_status="pending",

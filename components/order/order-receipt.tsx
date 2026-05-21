@@ -1,5 +1,6 @@
 import type { Order } from '@/types'
 import type { StoreSettings } from '@/lib/api'
+import { storePhonesContactLine } from '@/lib/store-contacts'
 import { siteConfig } from '@/lib/site'
 import { formatDate, formatPaymentMethod } from '@/lib/formatters'
 import { formatReceiptRub } from '@/lib/receipt-money'
@@ -83,7 +84,7 @@ export function OrderReceipt({ order, store, settings }: OrderReceiptProps) {
     <article className={styles.sheet}>
       <header>
         <div className={styles.topContacts}>
-          {store.phone ? <p>Телефон: {store.phone}</p> : null}
+          <p>Телефон: {storePhonesContactLine(store.phone)}</p>
           {store.email ? <p>Почта: {store.email}</p> : null}
         </div>
 

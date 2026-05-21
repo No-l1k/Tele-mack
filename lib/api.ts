@@ -38,7 +38,6 @@ interface ProductWritePayload {
   specs: Record<string, string | string[] | number | boolean>
   inStock: boolean
   stockStatus: 'in_stock' | 'low_stock' | 'preorder' | 'out_of_stock'
-  quantity: number
   isNew: boolean
   ratingMode?: 'manual' | 'auto'
   rating?: number

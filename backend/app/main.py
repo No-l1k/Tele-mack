@@ -11,12 +11,15 @@ from .config import settings
 from .database import (
     Base,
     engine,
+    is_sqlite,
     ensure_category_columns,
     ensure_order_columns,
     ensure_order_item_columns,
     ensure_product_columns,
+    ensure_product_stock_flags_synced,
 )
 from .routers import admin, auth, cart, categories, feeds, orders, products, public, reviews, users
+from .services.order_numbers import ensure_order_id_sequence
 
 settings.validate_runtime_security()
 
@@ -26,6 +29,9 @@ if settings.db_auto_create:
     ensure_category_columns()
     ensure_order_columns()
     ensure_order_item_columns()
+
+ensure_order_id_sequence(engine, is_sqlite=is_sqlite)
+ensure_product_stock_flags_synced()
 
 app = FastAPI(
     title=settings.app_name,

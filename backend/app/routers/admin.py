@@ -16,6 +16,8 @@ from ..deps import get_current_admin
 from ..models import Category, Order, OrderItem, Product, Setting, User
 from ..schemas import ApiResponse, StoreSettingsUpdateIn
 from ..rate_limit import rate_limit
+from ..services.checkout_services import DEFAULT_CHECKOUT_SERVICES, normalize_checkout_services
+from ..services.store_settings import normalize_delivery_info
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
 IMPORT_JOBS_LOCK = threading.Lock()
@@ -35,48 +37,7 @@ DEFAULT_STORE_SETTINGS = {
         {"image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=1200&q=80", "href": "/catalog/televizory"},
         {"image": "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=1200&q=80", "href": "/catalog/saundbary"},
     ],
-    "checkoutServices": [
-        {
-            "id": "pixel-check",
-            "name": "Проверка на битые пиксели",
-            "price": 1500,
-            "description": "Проверка экрана на наличие дефектных пикселей перед выдачей.",
-            "enabled": True,
-            "sortOrder": 1,
-        },
-        {
-            "id": "installation",
-            "name": "Установка телевизора",
-            "price": 3000,
-            "description": "Профессиональная установка и базовая настройка телевизора.",
-            "enabled": True,
-            "sortOrder": 2,
-        },
-        {
-            "id": "bracket-selection",
-            "name": "Подбор кронштейна для ТВ",
-            "price": 0,
-            "description": "подробнее",
-            "enabled": True,
-            "sortOrder": 3,
-        },
-        {
-            "id": "extended-warranty-2y",
-            "name": "Расширенная гарантия на 2 года",
-            "price": 1843,
-            "description": "Все заботы по ремонту мы возьмем на себя в течение 2 лет. Если товар не подлежит ремонту, обменяем его на новый той же модели.",
-            "enabled": True,
-            "sortOrder": 4,
-        },
-        {
-            "id": "extended-warranty-3y",
-            "name": "Расширенная гарантия на 3 года",
-            "price": 2765,
-            "description": "Все заботы по ремонту мы возьмем на себя в течение 3 лет. Если товар не подлежит ремонту, обменяем его на новый той же модели.",
-            "enabled": True,
-            "sortOrder": 5,
-        },
-    ],
+    "checkoutServices": DEFAULT_CHECKOUT_SERVICES,
 }
 
 
@@ -96,37 +57,6 @@ def _normalize_hero_banners(value: object) -> list[dict[str, str]]:
             href = str(item.get("href", "")).strip()
             normalized.append({"image": image, "href": href})
     return normalized
-
-
-def _normalize_checkout_services(value: object) -> list[dict[str, object]]:
-    def _normalize_list(raw: object) -> list[dict[str, object]]:
-        items = raw if isinstance(raw, list) else []
-        normalized_list: list[dict[str, object]] = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            service_id = str(item.get("id", "")).strip()
-            name = str(item.get("name", "")).strip()
-            if not service_id or not name:
-                continue
-            normalized_list.append(
-                {
-                    "id": service_id,
-                    "name": name,
-                    "price": max(int(item.get("price", 0) or 0), 0),
-                    "description": str(item.get("description", "")).strip() or None,
-                    "enabled": bool(item.get("enabled", True)),
-                    "sortOrder": int(item.get("sortOrder", 0) or 0),
-                }
-            )
-        return normalized_list
-
-    default_services = _normalize_list(DEFAULT_STORE_SETTINGS["checkoutServices"])
-    normalized = _normalize_list(value)
-    merged: dict[str, dict[str, object]] = {str(service["id"]): service for service in default_services}
-    for service in normalized:
-        merged[str(service["id"])] = service
-    return sorted(list(merged.values()), key=lambda service: int(service["sortOrder"]))
 
 
 @router.get("/stats", response_model=ApiResponse)
@@ -213,9 +143,11 @@ def get_settings(db: Session = Depends(get_db)):
         db.commit()
         db.refresh(row)
     settings_data = dict(row.value or {})
+    settings_data["deliveryInfo"] = normalize_delivery_info(settings_data.get("deliveryInfo"))
     settings_data["heroBanners"] = _normalize_hero_banners(settings_data.get("heroBanners"))
-    settings_data["checkoutServices"] = _normalize_checkout_services(
-        settings_data.get("checkoutServices", DEFAULT_STORE_SETTINGS["checkoutServices"])
+    raw_services = settings_data.get("checkoutServices")
+    settings_data["checkoutServices"] = normalize_checkout_services(
+        raw_services if "checkoutServices" in settings_data else None
     )
     if settings_data != row.value:
         row.value = settings_data
@@ -238,7 +170,9 @@ def update_settings(payload: StoreSettingsUpdateIn, db: Session = Depends(get_db
     if "heroBanners" in payload_data:
         settings_data["heroBanners"] = _normalize_hero_banners(payload_data.get("heroBanners"))
     if "checkoutServices" in payload_data:
-        settings_data["checkoutServices"] = _normalize_checkout_services(payload_data.get("checkoutServices"))
+        settings_data["checkoutServices"] = normalize_checkout_services(payload_data.get("checkoutServices"))
+    if "deliveryInfo" in payload_data or "deliveryInfo" in settings_data:
+        settings_data["deliveryInfo"] = normalize_delivery_info(settings_data.get("deliveryInfo"))
     row.value = settings_data
     db.commit()
     db.refresh(row)
@@ -470,7 +404,7 @@ def _run_import_yml_job(job_id: str, content: bytes):
                 product.old_price = old_price
                 product.category_id = category_id
                 product.in_stock = available
-                product.quantity = 1 if available else 0
+                product.stock_status = "in_stock" if available else "out_of_stock"
                 product.specs = specs
                 products_updated += 1
             else:
@@ -485,7 +419,7 @@ def _run_import_yml_job(job_id: str, content: bytes):
                         category_id=category_id,
                         brand=name.split(" ")[0] if name else "",
                         in_stock=available,
-                        quantity=1 if available else 0,
+                        stock_status="in_stock" if available else "out_of_stock",
                         specs=specs,
                     )
                 )

@@ -49,7 +49,6 @@ def _create_product(
         "brand": brand,
         "specs": specs if specs is not None else {"Цвет": "Чёрный"},
         "stockStatus": stock_status,
-        "quantity": 3,
         "inStock": stock_status in {"in_stock", "low_stock"},
         "isNew": False,
         "rating": 4.8,
@@ -192,7 +191,6 @@ def test_gtin_validation():
             "brand": "X",
             "specs": {},
             "stockStatus": "in_stock",
-            "quantity": 1,
             "gtin": "123",
         },
     )
@@ -254,7 +252,6 @@ def test_invalid_stock_status_rejected():
             "brand": "X",
             "specs": {},
             "stockStatus": "unknown_status",
-            "quantity": 1,
         },
     )
     assert response.status_code == 400
@@ -287,7 +284,6 @@ def test_recommended_accessory_ids_keep_only_existing_products():
             "brand": "X",
             "specs": {},
             "stockStatus": "in_stock",
-            "quantity": 1,
             "recommendedAccessoryIds": [accessory["id"], 9_999_999],
         },
     )

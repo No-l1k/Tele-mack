@@ -1,6 +1,7 @@
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { storePhonesContactLine } from '@/lib/store-contacts'
 
 const policyMeta = {
   effectiveDate: '06 мая 2026 г.',
@@ -10,7 +11,7 @@ const policyMeta = {
   inn: '525693244004',
   contactAddress: 'ул. Прасковьина, д. 21, офис 102',
   email: 'tele-makc@yandex.ru',
-  phone: '+7 (926) 802-34-97',
+  phone: storePhonesContactLine(),
 }
 
 export default function PrivacyPage() {

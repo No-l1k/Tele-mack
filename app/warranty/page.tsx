@@ -2,7 +2,7 @@ import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Breadcrumbs } from '@/components/ui/breadcrumbs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Shield, CheckCircle, AlertCircle, Phone } from 'lucide-react'
+import { Shield, CheckCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
@@ -31,28 +31,28 @@ export default function WarrantyPage() {
               </div>
               <h1 className="text-3xl font-bold mb-4">Гарантии</h1>
               <p className="text-muted-foreground text-lg">
-                Мы продаем только оригинальную технику с официальной гарантией производителя
+                Мы продаем только оригинальную технику с гарантией
               </p>
             </div>
 
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Гарантия производителя</CardTitle>
+                  <CardTitle>Гарантия</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-muted-foreground">
-                    Вся техника, представленная в нашем магазине, имеет официальную гарантию 
-                    от производителя. Срок гарантии зависит от типа товара и бренда:
+                    Вся техника, представленная в нашем магазине, имеет гарантию. 
+                    Срок гарантии зависит от типа товара и бренда:
                   </p>
                   <ul className="space-y-2">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                      <span><strong>Телевизоры:</strong> 12-24 месяца</span>
+                      <span><strong>Телевизоры:</strong> 12 месяцев</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                      <span><strong>Саундбары:</strong> 12-24 месяца</span>
+                      <span><strong>Саундбары:</strong> 12 месяцева</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-green-500" />
@@ -127,12 +127,9 @@ export default function WarrantyPage() {
                   </ol>
                   
                   <div className="pt-4 border-t">
-                    <Link href="tel:+79268023497">
-                      <Button className="gap-2">
-                        <Phone className="h-4 w-4" />
-                        Позвонить нам
-                      </Button>
-                    </Link>
+                    <Button asChild>
+                      <Link href="/contacts">Связаться с нами</Link>
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

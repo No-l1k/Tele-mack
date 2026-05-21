@@ -100,3 +100,27 @@ def ensure_order_columns() -> None:
         for column, ddl in column_ddl.items():
             if column not in existing:
                 connection.execute(text(ddl))
+
+
+def ensure_product_stock_flags_synced() -> None:
+    """Синхронизирует in_stock со stock_status после смены логики остатков."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                UPDATE products
+                SET in_stock = 1
+                WHERE stock_status IN ('in_stock', 'low_stock') AND in_stock = 0
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                UPDATE products
+                SET in_stock = 0
+                WHERE stock_status NOT IN ('in_stock', 'low_stock') AND in_stock = 1
+                """
+            )
+        )
+

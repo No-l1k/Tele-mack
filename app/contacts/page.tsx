@@ -22,6 +22,7 @@ import {
   CheckCircle,
 } from 'lucide-react'
 import Link from 'next/link'
+import { STORE_PHONES, STORE_WHATSAPP_DIGITS } from '@/lib/store-contacts'
 
 export default function ContactsPage() {
   const [isSubmitted, setIsSubmitted] = useState(false)
@@ -85,21 +86,24 @@ export default function ContactsPage() {
                   <CardTitle>Свяжитесь с нами</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <Link 
-                    href="tel:+79268023497"
-                    className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                  >
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Phone className="h-6 w-6 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Телефон</p>
-                      <p className="text-lg font-medium">+7 (926) 802-34-97</p>
-                    </div>
-                  </Link>
+                  {STORE_PHONES.map((phone) => (
+                    <Link
+                      key={phone.tel}
+                      href={`tel:${phone.tel}`}
+                      className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    >
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Phone className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Телефон</p>
+                        <p className="text-lg font-medium">{phone.display}</p>
+                      </div>
+                    </Link>
+                  ))}
 
                   <Link 
-                    href="https://wa.me/79268023497"
+                    href={`https://wa.me/${STORE_WHATSAPP_DIGITS}`}
                     target="_blank"
                     className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                   >

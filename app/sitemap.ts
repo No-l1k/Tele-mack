@@ -5,6 +5,11 @@ import { getApiBaseUrl } from '@/lib/api-base-url'
 type ApiEnvelope<T> = { data: T }
 type Category = { slug: string }
 type Product = { slug: string; createdAt?: string }
+type PaginatedProducts = {
+  data: Product[]
+  totalPages?: number
+  page?: number
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -26,13 +31,33 @@ async function fetchApiData<T>(apiBaseUrl: string, endpoint: string, fallback: T
   }
 }
 
+async function fetchAllProducts(apiBaseUrl: string): Promise<Product[]> {
+  const pageSize = 100
+  let page = 1
+  let totalPages = 1
+  const result: Product[] = []
+
+  while (page <= totalPages) {
+    const response = await fetchApiData<PaginatedProducts>(
+      apiBaseUrl,
+      `/products?page=${page}&page_size=${pageSize}`,
+      { data: [], totalPages: 1, page: 1 },
+    )
+    result.push(...(response.data ?? []))
+    totalPages = Math.max(1, Number(response.totalPages || 1))
+    page += 1
+  }
+
+  return result
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = siteConfig.url.replace(/\/+$/, '')
   const apiBaseUrl = getApiBaseUrl()
 
   const [categories, products] = await Promise.all([
     fetchApiData<Category[]>(apiBaseUrl, '/categories', []),
-    fetchApiData<Product[]>(apiBaseUrl, '/products?page=1&page_size=1000', []),
+    fetchAllProducts(apiBaseUrl),
   ])
 
   // Static pages
@@ -40,11 +65,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     '',
     '/catalog',
     '/catalog/new',
-    '/cart',
-    '/checkout',
-    '/account',
-    '/account/orders',
-    '/account/favorites',
     '/delivery',
     '/services',
     '/contacts',

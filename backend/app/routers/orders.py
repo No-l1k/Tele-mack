@@ -14,7 +14,14 @@ from ..schemas import ApiResponse, OrderCreate, OrderPublicLookupIn, OrderStatus
 from ..services.csv_export import excel_csv_response
 from ..services.notifications import email_notifications_enabled, send_new_order_email
 from ..services.orders import order_to_dict
+from ..services.products import product_available_for_order
+from ..services.order_numbers import allocate_next_order_id
 from ..services.store_settings import min_order_subtotal_rub
+from ..services.checkout_services import checkout_services_map_from_settings
+from ..services.tv_checkout_services import (
+    LEGACY_TV_CHECKOUT_SERVICE_IDS,
+    resolve_tv_checkout_service,
+)
 from ..pricing_constants import COURIER_DELIVERY_COST_RUB
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -23,15 +30,6 @@ ALLOWED_ORDER_STATUSES = {"pending", "confirmed", "processing", "shipped", "deli
 ALLOWED_PAYMENT_METHODS = {"cash", "card", "pickup"}
 ALLOWED_DELIVERY_METHODS = {"courier", "pickup"}
 COURIER_DELIVERY_COST = COURIER_DELIVERY_COST_RUB
-DEFAULT_CHECKOUT_SERVICES = [
-    {"id": "pixel-check", "name": "Проверка на битые пиксели", "price": 1500, "enabled": True},
-    {"id": "installation", "name": "Установка телевизора", "price": 3000, "enabled": True},
-    {"id": "bracket-selection", "name": "Подбор кронштейна для ТВ", "price": 0, "enabled": True},
-    {"id": "extended-warranty-2y", "name": "Расширенная гарантия на 2 года", "price": 1843, "enabled": True},
-    {"id": "extended-warranty-3y", "name": "Расширенная гарантия на 3 года", "price": 2765, "enabled": True},
-]
-
-
 def _public_order_token(order: Order) -> str:
     payload = f"{order.id}:{order.customer_phone or ''}:{settings.secret_key}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -40,23 +38,7 @@ def _public_order_token(order: Order) -> str:
 def _checkout_services_map(db: Session) -> dict[str, dict[str, object]]:
     row = db.query(Setting).filter(Setting.key == "store").first()
     settings_data = dict(row.value or {}) if row else {}
-    services = settings_data.get("checkoutServices")
-    if not isinstance(services, list):
-        services = []
-    result: dict[str, dict[str, object]] = {}
-    for service in [*DEFAULT_CHECKOUT_SERVICES, *services]:
-        if not isinstance(service, dict):
-            continue
-        service_id = str(service.get("id", "")).strip()
-        name = str(service.get("name", "")).strip()
-        if not service_id or not name or not bool(service.get("enabled", True)):
-            continue
-        result[service_id] = {
-            "id": service_id,
-            "name": name,
-            "price": max(int(service.get("price", 0) or 0), 0),
-        }
-    return result
+    return checkout_services_map_from_settings(settings_data)
 
 
 def _normalize_phone(value: str | None) -> str:
@@ -109,8 +91,11 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         product = db.query(Product).filter(Product.id == item.productId).with_for_update().first()
         if not product:
             raise HTTPException(status_code=400, detail=f"Product not found: {item.productId}")
-        if not product.in_stock or product.quantity < quantity:
-            raise HTTPException(status_code=400, detail=f"Not enough stock for product: {product.name}")
+        if not product_available_for_order(product):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Товар «{product.name}» сейчас недоступен для заказа",
+            )
 
         price = int(product.price)
         line_total = quantity * price
@@ -126,11 +111,6 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
 
     order_items: list[OrderItem] = []
     for product, quantity, price, line_total in lines:
-        product.quantity -= quantity
-        if product.quantity <= 0:
-            product.quantity = 0
-            product.in_stock = False
-
         images = (product.specs or {}).get("images", [])
         order_items.append(
             OrderItem(
@@ -154,8 +134,25 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         selected_service_ids.add("pixel-check")
     if payload.installation:
         selected_service_ids.add("installation")
-    selected_services = [services_map[service_id] for service_id in selected_service_ids if service_id in services_map]
+
+    products_by_id = {product.id: product for product, *_ in lines}
+    quantities_by_product: dict[int, int] = {}
+    for product, quantity, *_ in lines:
+        quantities_by_product[product.id] = quantities_by_product.get(product.id, 0) + quantity
+
+    selected_services: list[dict[str, object]] = []
+    for service_id in selected_service_ids:
+        tv_service = resolve_tv_checkout_service(service_id, products_by_id, quantities_by_product)
+        if tv_service:
+            selected_services.append(tv_service)
+            continue
+        static_service = services_map.get(service_id)
+        if static_service and service_id not in LEGACY_TV_CHECKOUT_SERVICE_IDS:
+            selected_services.append(static_service)
+
     services_total = sum(int(service["price"]) for service in selected_services)
+    has_tv_pixel = any(str(s.get("id", "")).startswith("tv-pixel:") for s in selected_services)
+    has_tv_install = any(str(s.get("id", "")).startswith("tv-install:") for s in selected_services)
     delivery_cost = 0
     if payload.deliveryMethod == "courier":
         delivery_cost = COURIER_DELIVERY_COST
@@ -172,6 +169,7 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
             order_user_id = created_user.id
 
     order = Order(
+        id=allocate_next_order_id(db),
         user_id=order_user_id,
         status="pending",
         total=total,
@@ -186,8 +184,8 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         address_house=payload.house,
         address_apartment=payload.apartment,
         comment=payload.comment,
-        pixel_check=("pixel-check" in selected_service_ids) or payload.pixelCheck,
-        installation=("installation" in selected_service_ids) or payload.installation,
+        pixel_check=has_tv_pixel or ("pixel-check" in selected_service_ids) or payload.pixelCheck,
+        installation=has_tv_install or ("installation" in selected_service_ids) or payload.installation,
         selected_services=selected_services,
         services_total=services_total,
         items=order_items,

@@ -1,5 +1,16 @@
 from ..models import Product
 
+PURCHASABLE_STOCK_STATUSES = frozenset({"in_stock", "low_stock"})
+
+
+def product_in_stock_from_status(stock_status: str | None) -> bool:
+    return (stock_status or "").strip() in PURCHASABLE_STOCK_STATUSES
+
+
+def product_available_for_order(product: Product) -> bool:
+    """Доступен ли товар для заказа — по stock_status (источник правды для админки)."""
+    return product_in_stock_from_status(product.stock_status)
+
 
 def _normalize_product_images(specs: dict) -> list[str]:
     """Локальные /uploads — первыми; при наличии загрузок убираем типичные CDN-заглушки (unsplash)."""
@@ -33,9 +44,8 @@ def product_to_dict(product: Product) -> dict:
         "sku": product.sku,
         "gtin": product.gtin,
         "specs": clean_specs,
-        "inStock": product.in_stock,
+        "inStock": product_in_stock_from_status(product.stock_status),
         "stockStatus": product.stock_status,
-        "quantity": product.quantity,
         "ratingMode": product.rating_mode,
         "rating": product.rating,
         "reviewsCount": product.reviews_count,

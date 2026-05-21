@@ -63,6 +63,101 @@ function flattenCategories(categories: Category[], depth = 0): FlatCategory[] {
   return result
 }
 
+function InlineProductPriceEditor({
+  product,
+  onUpdated,
+}: {
+  product: Product
+  onUpdated: (updated: Product) => void
+}) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState(String(product.price))
+  const [isSaving, setIsSaving] = useState(false)
+
+  const resetDraft = () => setDraft(String(product.price))
+
+  const handleStartEdit = () => {
+    resetDraft()
+    setIsEditing(true)
+  }
+
+  const handleCancel = () => {
+    resetDraft()
+    setIsEditing(false)
+  }
+
+  const handleSave = async () => {
+    const nextPrice = Math.round(Number(draft.replace(/\s/g, '')))
+    if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+      toast.error('Введите корректную цену (целое число ≥ 0)')
+      return
+    }
+    if (nextPrice === product.price) {
+      setIsEditing(false)
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const response = await productsApi.update(product.id, { price: nextPrice })
+      onUpdated(response.data)
+      toast.success('Цена обновлена')
+      setIsEditing(false)
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось обновить цену')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          type="number"
+          min={0}
+          step={1}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void handleSave()
+            if (e.key === 'Escape') handleCancel()
+          }}
+          className="h-8 w-32"
+          disabled={isSaving}
+          autoFocus
+        />
+        <Button size="sm" onClick={() => void handleSave()} disabled={isSaving}>
+          {isSaving ? 'Сохранение...' : 'Изменить'}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleCancel} disabled={isSaving}>
+          Отмена
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1">
+      <p className="font-medium">{formatPrice(product.price)}</p>
+      {product.oldPrice != null && product.oldPrice > 0 && (
+        <p className="text-sm text-muted-foreground line-through">
+          {formatPrice(product.oldPrice)}
+        </p>
+      )}
+      <Button
+        type="button"
+        variant="link"
+        size="sm"
+        className="h-auto p-0 text-primary"
+        onClick={handleStartEdit}
+      >
+        Изменить
+      </Button>
+    </div>
+  )
+}
+
 export default function AdminProductsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -136,6 +231,10 @@ export default function AdminProductsPage() {
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'Не удалось удалить товар')
     }
+  }
+
+  const handleProductUpdated = (updated: Product) => {
+    setProducts((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
   }
 
   const handleExport = async () => {
@@ -254,14 +353,10 @@ export default function AdminProductsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{formatPrice(product.price)}</p>
-                        {product.oldPrice && (
-                          <p className="text-sm text-muted-foreground line-through">
-                            {formatPrice(product.oldPrice)}
-                          </p>
-                        )}
-                      </div>
+                      <InlineProductPriceEditor
+                        product={product}
+                        onUpdated={handleProductUpdated}
+                      />
                     </TableCell>
                     <TableCell>
                       <Badge

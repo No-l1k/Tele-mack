@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -28,6 +28,14 @@ import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
 import { normalizeProductSlug, normalizeProductSlugInput } from '@/lib/admin-slug'
 import { resolveMediaUrl } from '@/lib/media'
 import { htmlToText } from '@/lib/rich-text'
+import { ProductSeoDialog } from '@/components/admin/product-seo-dialog'
+import { readProductSeoFromForm } from '@/components/admin/read-product-seo-form'
+import {
+  buildProductSeoPreview,
+  normalizeMetaDescriptionForSave,
+  normalizeMetaTitleForSave,
+  type ProductSeoInput,
+} from '@/lib/product-seo'
 
 const normalizeBrand = (value: string) =>
   value
@@ -68,6 +76,10 @@ export default function NewProductPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '' }])
   const [additionalOpen, setAdditionalOpen] = useState(false)
+  const [seoOpen, setSeoOpen] = useState(false)
+  const [metaTitle, setMetaTitle] = useState('')
+  const [metaDescription, setMetaDescription] = useState('')
+  const [seoFormTick, setSeoFormTick] = useState(0)
   const descriptionEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
   const serviceInfoEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
 
@@ -95,6 +107,14 @@ export default function NewProductPage() {
     }
     setIsLoading(true)
     const payload = new FormData(event.currentTarget)
+    const selectedCategory = categories.find((category) => category.id === categoryId) ?? null
+    const seoInputForSave = readProductSeoFromForm('product-new-form', {
+      name: String(payload.get('name') || name),
+      slug: normalizedSlug,
+      price: Number(payload.get('price') || 0),
+      brand: normalizeBrand(String(payload.get('brand') || '')),
+      categoryName: selectedCategory?.name,
+    })
     const specs = Object.fromEntries(
       specRows
         .map((row) => [row.key.trim(), row.value.trim()] as const)
@@ -109,14 +129,13 @@ export default function NewProductPage() {
         price: Number(payload.get('price') || 0),
         oldPrice: payload.get('oldPrice') ? Number(payload.get('oldPrice')) : undefined,
         categoryId: Number(categoryId),
-        categorySlug: categories.find((category) => category.id === categoryId)?.slug || '',
+        categorySlug: selectedCategory?.slug || '',
         brand: normalizeBrand(String(payload.get('brand') || '')),
         sku: String(payload.get('sku') || '').trim() || undefined,
         gtin: String(payload.get('gtin') || '').trim() || undefined,
         specs,
         inStock: ['in_stock', 'low_stock'].includes(String(payload.get('stockStatus') || 'in_stock')),
         stockStatus: String(payload.get('stockStatus') || 'in_stock') as 'in_stock' | 'low_stock' | 'preorder' | 'out_of_stock',
-        quantity: Number(payload.get('quantity') || 0),
         isNew: payload.get('isNew') === 'on',
         ratingMode,
         rating: ratingMode === 'manual' ? Number(payload.get('rating') || 4.8) : undefined,
@@ -125,8 +144,8 @@ export default function NewProductPage() {
         warrantyType: String(payload.get('warrantyType') || '').trim() || undefined,
         serviceInfo: String(payload.get('serviceInfo') || '').trim() || undefined,
         recommendedAccessoryIds: recommendedAccessoryIds.map((id) => Number(id)),
-        metaTitle: String(payload.get('metaTitle') || '').trim() || undefined,
-        metaDescription: String(payload.get('metaDescription') || '').trim() || undefined,
+        metaTitle: normalizeMetaTitleForSave(seoInputForSave, metaTitle),
+        metaDescription: normalizeMetaDescriptionForSave(seoInputForSave, metaDescription),
         images: [],
       })
       const productId = String(response.data.id)
@@ -189,13 +208,35 @@ export default function NewProductPage() {
 
   const selectedCategory = categories.find((category) => category.id === categoryId) ?? null
 
+  const seoFallback: ProductSeoInput = {
+    name,
+    slug,
+    price: 0,
+    brand: '',
+    categoryName: selectedCategory?.name,
+  }
+
+  const seoInputLive = useMemo(
+    () => (seoOpen ? readProductSeoFromForm('product-new-form', seoFallback) : seoFallback),
+    [seoOpen, seoFallback, seoFormTick]
+  )
+
+  const seoPreviewShort = buildProductSeoPreview(seoInputLive, metaTitle, metaDescription).title
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Link href="/admin/products"><Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button></Link>
         <h1 className="text-2xl font-bold">Новый товар</h1>
       </div>
-      <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <form
+        id="product-new-form"
+        onSubmit={handleSubmit}
+        onInput={() => {
+          if (seoOpen) setSeoFormTick((t) => t + 1)
+        }}
+        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]"
+      >
         <div className="space-y-6">
           <Card className="border-blue-200/70 bg-blue-50/30 shadow-sm">
             <CardHeader className="border-b bg-blue-100/40">
@@ -339,14 +380,51 @@ export default function NewProductPage() {
           </Card>
         </div>
         <div className="space-y-6 xl:sticky xl:top-20 xl:self-start">
+          <Card className="shadow-sm border-emerald-200/70">
+            <CardHeader>
+              <CardTitle>Поисковые сервисы (SEO)</CardTitle>
+              <p className="text-xs text-muted-foreground font-normal">
+                Превью сниппета в поиске и автозаполнение Title / Description.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm line-clamp-2 text-muted-foreground">{seoPreviewShort || 'Укажите название товара'}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setSeoFormTick((t) => t + 1)
+                  setSeoOpen(true)
+                }}
+              >
+                Настроить SEO
+              </Button>
+            </CardContent>
+          </Card>
+
+          <ProductSeoDialog
+            open={seoOpen}
+            onOpenChange={(open) => {
+              setSeoOpen(open)
+              if (open) setSeoFormTick((t) => t + 1)
+            }}
+            seoInput={seoInputLive}
+            metaTitle={metaTitle}
+            metaDescription={metaDescription}
+            onApply={(title, description) => {
+              setMetaTitle(title)
+              setMetaDescription(description)
+            }}
+          />
+
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle>Цена и остатки</CardTitle>
+              <CardTitle>Цена и наличие</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <Input type="number" name="price" placeholder="Цена" required />
               <Input type="number" name="oldPrice" placeholder="Старая цена" />
-              <Input type="number" name="quantity" placeholder="Количество" required />
               <select name="stockStatus" className="w-full rounded-md border bg-background px-3 py-2 text-sm" defaultValue="in_stock">
                 <option value="in_stock">В наличии</option>
                 <option value="low_stock">Мало</option>
@@ -386,14 +464,6 @@ export default function NewProductPage() {
                   <div className="space-y-2">
                     <Label htmlFor="gtin-new">Штрихкод GTIN / EAN</Label>
                     <Input id="gtin-new" name="gtin" placeholder="Необязательно, 8–14 цифр" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="meta-title-new">Заголовок для поиска (meta title)</Label>
-                    <Input id="meta-title-new" name="metaTitle" placeholder="Необязательно" maxLength={255} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="meta-desc-new">Краткое описание для поиска</Label>
-                    <Textarea id="meta-desc-new" name="metaDescription" placeholder="Необязательно" rows={3} maxLength={500} />
                   </div>
                 </CollapsibleContent>
               </Collapsible>

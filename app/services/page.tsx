@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Phone } from 'lucide-react'
 import Link from 'next/link'
+import { STORE_PHONES } from '@/lib/store-contacts'
 import { ServicesCards } from './services-cards'
 
 export const metadata = {
@@ -43,12 +44,14 @@ export default function ServicesPage() {
                 Свяжитесь с нами, и мы подберем оптимальное решение для ваших задач
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="tel:+79268023497">
-                  <Button variant="secondary" size="lg" className="gap-2">
-                    <Phone className="h-5 w-5" />
-                    +7 (926) 802-34-97
-                  </Button>
-                </Link>
+                {STORE_PHONES.map((phone) => (
+                  <Link key={phone.tel} href={`tel:${phone.tel}`}>
+                    <Button variant="secondary" size="lg" className="gap-2 w-full sm:w-auto">
+                      <Phone className="h-5 w-5" />
+                      {phone.display}
+                    </Button>
+                  </Link>
+                ))}
                 <Link href="/contacts">
                   <Button variant="outline" size="lg" className="border-primary-foreground/20 hover:bg-primary-foreground/10">
                     Написать нам

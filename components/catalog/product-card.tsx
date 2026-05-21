@@ -13,6 +13,7 @@ import { formatPrice, calculateDiscount } from '@/lib/formatters'
 import type { Product } from '@/types'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/toast'
+import { isProductAvailableForPurchase } from '@/lib/product-availability'
 import { resolveMediaUrl } from '@/lib/media'
 
 interface ProductCardProps {
@@ -28,10 +29,21 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const discount = product.oldPrice ? calculateDiscount(product.price, product.oldPrice) : 0
   const inCart = isInCart(product.id)
   const favorite = isFavorite(product.id)
+  const canPurchase = isProductAvailableForPurchase(product)
+  const stockLabel = {
+    in_stock: 'В наличии',
+    low_stock: 'Мало',
+    preorder: 'Под заказ',
+    out_of_stock: 'Нет в наличии',
+  }[product.stockStatus]
 
   const handleCartButtonClick = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (!canPurchase) {
+      toast.error('Товар сейчас недоступен для заказа')
+      return
+    }
     if (inCart) {
       router.push('/cart')
       return
@@ -43,7 +55,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    toggleFavorite(product.id)
+    toggleFavorite(product.id, product)
     if (favorite) {
       toast.removedFromFavorites(product.name)
     } else {
@@ -128,9 +140,9 @@ export function ProductCard({ product, className }: ProductCardProps) {
           {/* Stock status */}
           <p className={cn(
             'text-xs mb-2',
-            product.inStock ? 'text-green-600' : 'text-muted-foreground'
+            canPurchase ? 'text-green-600' : 'text-muted-foreground'
           )}>
-            {product.inStock ? 'В наличии' : 'Под заказ'}
+            {stockLabel}
           </p>
 
           {/* Price - fixed height area */}
@@ -152,6 +164,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
               variant={inCart ? 'secondary' : 'default'}
               size="sm"
               onClick={handleCartButtonClick}
+              disabled={!canPurchase && !inCart}
             >
               <ShoppingCart className="h-3.5 w-3.5" />
               <span className="truncate">{inCart ? 'В корзине' : 'В корзину'}</span>
