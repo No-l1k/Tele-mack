@@ -25,7 +25,7 @@ const features = [
   {
     icon: Shield,
     title: 'Гарантия качества',
-    description: 'Официальная гарантия производителя',
+    description: 'Гарантия на все товары от 1 года',
   },
   {
     icon: CreditCard,
