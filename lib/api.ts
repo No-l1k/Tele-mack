@@ -107,10 +107,21 @@ async function fetchApi<T>(
     }
   }
 
-  const response = await fetch(url, config)
+  let response: Response
+  try {
+    response = await fetch(url, config)
+  } catch (error) {
+    if (typeof window !== 'undefined') {
+      console.error('[API] сеть недоступна:', url, error)
+    }
+    throw error
+  }
 
   if (!response.ok) {
     const body = await response.json().catch(() => null)
+    if (typeof window !== 'undefined') {
+      console.error('[API]', response.status, url, body)
+    }
     throw new Error(formatApiErrorBody(body) || `HTTP ${response.status}`)
   }
 

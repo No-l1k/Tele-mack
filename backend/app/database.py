@@ -1,5 +1,4 @@
-from sqlalchemy import create_engine
-from sqlalchemy import text
+from sqlalchemy import create_engine, text, update
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
@@ -104,23 +103,20 @@ def ensure_order_columns() -> None:
 
 def ensure_product_stock_flags_synced() -> None:
     """Синхронизирует in_stock со stock_status после смены логики остатков."""
+    from .models import Product
+
+    purchasable = ("in_stock", "low_stock")
     with engine.begin() as connection:
         connection.execute(
-            text(
-                """
-                UPDATE products
-                SET in_stock = 1
-                WHERE stock_status IN ('in_stock', 'low_stock') AND in_stock = 0
-                """
-            )
+            update(Product)
+            .where(Product.stock_status.in_(purchasable))
+            .where(Product.in_stock.is_(False))
+            .values(in_stock=True)
         )
         connection.execute(
-            text(
-                """
-                UPDATE products
-                SET in_stock = 0
-                WHERE stock_status NOT IN ('in_stock', 'low_stock') AND in_stock = 1
-                """
-            )
+            update(Product)
+            .where(Product.stock_status.notin_(purchasable))
+            .where(Product.in_stock.is_(True))
+            .values(in_stock=False)
         )
 

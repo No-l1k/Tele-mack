@@ -1,10 +1,13 @@
 /**
  * Базовый URL API для fetch.
  *
- * В браузере `NEXT_PUBLIC_API_URL=/api` резолвится в текущий origin (nginx отдаёт на FastAPI).
- * На сервере Next в Docker относительный `/api` указывает на сам контейнер фронта, где маршрутов API нет —
- * SSR зависает. Для сервера используем API_URL_INTERNAL (например http://backend:8000/api).
+ * Браузер: `NEXT_PUBLIC_API_URL=/api` → текущий origin (nginx проксирует на FastAPI).
+ * SSR в Docker: прямой вызов сервиса backend (см. API_URL_INTERNAL в compose).
  */
+function isNextProductionBuild(): boolean {
+  return process.env.NEXT_PHASE === 'phase-production-build'
+}
+
 export function getApiBaseUrl(): string {
   const pub = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '')
 
@@ -25,7 +28,14 @@ export function getApiBaseUrl(): string {
     return pub
   }
 
-  // Относительный /api на сервере без API_URL_INTERNAL (например `next build` в Docker).
-  // Не используем hostname backend — его нет на этапе сборки образа.
+  if (isNextProductionBuild()) {
+    return 'http://127.0.0.1:8000/api'
+  }
+
+  // next start в docker-compose без API_URL_INTERNAL (редко)
+  if (process.env.NODE_ENV === 'production') {
+    return 'http://backend:8000/api'
+  }
+
   return 'http://127.0.0.1:8000/api'
 }
