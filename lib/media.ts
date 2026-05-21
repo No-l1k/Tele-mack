@@ -43,6 +43,31 @@ function backendOrigin(): string {
   return origin
 }
 
+/** Путь к файлу в /uploads (локальный или внутри абсолютного URL). */
+export function isUploadMediaPath(path: string | undefined | null): boolean {
+  if (!path?.trim()) return false
+  if (path.startsWith('/uploads')) return true
+  try {
+    const url = path.startsWith('http://') || path.startsWith('https://')
+      ? new URL(path)
+      : new URL(path, 'https://placeholder.local')
+    return url.pathname.startsWith('/uploads')
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Для next/image: загрузки с API не гоняем через /_next/image (400 «url parameter is not allowed» в prod).
+ */
+export function shouldUnoptimizeMedia(path: string | undefined | null): boolean {
+  if (!path?.trim()) return false
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return isUploadMediaPath(path)
+  }
+  return path.startsWith('/uploads')
+}
+
 export function resolveMediaUrl(path: string | undefined | null): string {
   if (path == null || path === '') {
     return '/placeholder.svg'

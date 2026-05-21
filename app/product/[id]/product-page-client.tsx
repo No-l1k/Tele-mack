@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { ProductImage } from '@/components/ui/product-image'
 import { Heart, ShoppingCart, Truck, CheckCircle, BarChart3 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
@@ -360,8 +361,8 @@ export default function ProductPageClient({
                         <div className="grid gap-4 sm:grid-cols-[180px_1fr] items-start">
                           <div className="relative h-[110px] w-full overflow-hidden rounded-md border bg-muted/30">
                             {product.images[0] ? (
-                              <Image
-                                src={resolveMediaUrl(product.images[0])}
+                              <ProductImage
+                                src={product.images[0]}
                                 alt={product.name}
                                 fill
                                 className="object-contain"

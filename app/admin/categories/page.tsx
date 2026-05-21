@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
+import { ProductImage } from '@/components/ui/product-image'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,7 +25,6 @@ import {
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { categoriesApi } from '@/lib/api'
-import { resolveMediaUrl } from '@/lib/media'
 import type { Category } from '@/types'
 import { Plus, Pencil, Trash2, Tags } from 'lucide-react'
 
@@ -311,8 +310,8 @@ export default function AdminCategoriesPage() {
                     <TableCell>
                       <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
                         {category.image ? (
-                          <Image
-                            src={resolveMediaUrl(category.image)}
+                          <ProductImage
+                            src={category.image}
                             alt={category.name}
                             width={40}
                             height={40}

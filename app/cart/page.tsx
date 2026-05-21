@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
+import { ProductImage } from '@/components/ui/product-image'
 import { Trash2, ArrowLeft, ShoppingCart, Heart } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
@@ -16,7 +16,6 @@ import { useCart } from '@/context/cart-context'
 import { useFavorites } from '@/context/favorites-context'
 import { formatPrice, formatItemsCount } from '@/lib/formatters'
 import { getNewProducts } from '@/lib/data/catalog'
-import { resolveMediaUrl } from '@/lib/media'
 import { calculateDeliveryCost } from '@/lib/pricing'
 import type { Product } from '@/types'
 
@@ -119,8 +118,8 @@ export default function CartPage() {
                         href={`/product/${item.product.slug}`}
                         className="flex-shrink-0 w-20 h-20 md:w-24 md:h-24 bg-muted/30 rounded-lg overflow-hidden"
                       >
-                        <Image
-                          src={resolveMediaUrl(item.product.images[0])}
+                        <ProductImage
+                          src={item.product.images[0]}
                           alt={item.product.name}
                           width={96}
                           height={96}

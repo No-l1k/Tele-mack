@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
+import { ProductImage } from '@/components/ui/product-image'
 import { ArrowLeft, Truck, Store, Banknote, CreditCard, Building } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
@@ -19,7 +19,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useCart } from '@/context/cart-context'
 import { formatPrice, formatItemsCount } from '@/lib/formatters'
 import { ordersApi, publicSettingsApi, type CheckoutService } from '@/lib/api'
-import { resolveMediaUrl } from '@/lib/media'
 import { CARD_SURCHARGE_RATE, calculateDeliveryCost } from '@/lib/pricing'
 import { saveOrderAccess } from '@/lib/order-access'
 import { isCompleteRuPhone } from '@/lib/phone'
@@ -519,8 +518,8 @@ export default function CheckoutPage() {
                       {items.map(item => (
                         <div key={item.product.id} className="flex gap-3">
                           <div className="flex-shrink-0 w-12 h-12 bg-muted/30 rounded overflow-hidden">
-                            <Image
-                              src={resolveMediaUrl(item.product.images[0])}
+                            <ProductImage
+                              src={item.product.images[0]}
                               alt={item.product.name}
                               width={48}
                               height={48}

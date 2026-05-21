@@ -14,14 +14,18 @@ function uploadsPatternsFromSiteUrl() {
   try {
     const u = new URL(raw.includes('://') ? raw : `https://${raw}`)
     const protocol = u.protocol === 'https:' ? 'https' : 'http'
-    return [
-      {
-        protocol,
-        hostname: u.hostname,
-        port: u.port || undefined,
-        pathname: '/uploads/**',
-      },
-    ]
+    const base = {
+      protocol,
+      port: u.port || '',
+      pathname: '/uploads/**',
+    }
+    const hostnames = new Set([u.hostname])
+    if (u.hostname.startsWith('www.')) {
+      hostnames.add(u.hostname.slice(4))
+    } else {
+      hostnames.add(`www.${u.hostname}`)
+    }
+    return [...hostnames].map((hostname) => ({ ...base, hostname }))
   } catch {
     return []
   }
@@ -31,6 +35,11 @@ function uploadsPatternsFromSiteUrl() {
 const nextConfig = {
   images: {
     unoptimized: process.env.NODE_ENV !== 'production',
+    localPatterns: [
+      {
+        pathname: '/uploads/**',
+      },
+    ],
     remotePatterns: [
       {
         protocol: 'https',

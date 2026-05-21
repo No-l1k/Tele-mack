@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
+import { ProductImage } from '@/components/ui/product-image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -157,7 +157,7 @@ export default function AdminOrderDetailPage() {
                   >
                     <div className="h-16 w-16 rounded-lg bg-white flex items-center justify-center overflow-hidden">
                       {item.productImage ? (
-                        <Image
+                        <ProductImage
                           src={item.productImage}
                           alt={item.productName}
                           width={64}

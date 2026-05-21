@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
+import { ProductImage } from '@/components/ui/product-image'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,7 +30,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { formatPrice } from '@/lib/formatters'
 import { categoriesApi, productsApi } from '@/lib/api'
-import { resolveMediaUrl } from '@/lib/media'
 import type { Category, Product, ProductFilters } from '@/types'
 import { toast } from 'sonner'
 import {
@@ -327,8 +326,8 @@ export default function AdminProductsPage() {
                     <TableCell>
                       <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
                         {product.images[0] ? (
-                          <Image
-                            src={resolveMediaUrl(product.images[0])}
+                          <ProductImage
+                            src={product.images[0]}
                             alt={product.name}
                             width={48}
                             height={48}
