@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import { getProductByIdOrSlug } from '@/lib/data/catalog'
 import { resolveMediaUrl } from '@/lib/media'
 import { htmlToText } from '@/lib/rich-text'
@@ -28,10 +29,7 @@ export async function generateMetadata({
   }
 
   if (!product) {
-    return {
-      title: 'Товар не найден',
-      robots: { index: false, follow: false },
-    }
+    notFound()
   }
 
   const canonical = `/product/${product.slug}`

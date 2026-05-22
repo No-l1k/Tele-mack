@@ -8,6 +8,15 @@ from ..services.yandex_feed import build_yandex_feed_xml
 router = APIRouter(prefix="/feeds", tags=["feeds"])
 
 
+@router.head("/yandex.yml")
+def yandex_products_feed_head() -> Response:
+    """HEAD для проверок (curl -I) и роботов; тело не строим."""
+    return Response(
+        status_code=200,
+        headers={"Cache-Control": "public, max-age=900"},
+    )
+
+
 @router.get("/yandex.yml")
 def yandex_products_feed(db: Session = Depends(get_db)) -> Response:
     """

@@ -14,3 +14,8 @@ def test_yandex_feed_returns_xml():
     assert "<shop>" in body
     assert "TeleMakc" in body
     assert "RUR" in body
+
+
+def test_yandex_feed_head_ok():
+    response = client.head("/api/feeds/yandex.yml")
+    assert response.status_code == 200

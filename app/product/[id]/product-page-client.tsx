@@ -35,11 +35,10 @@ import { Textarea } from '@/components/ui/textarea'
 import type { Category, Product } from '@/types'
 
 type ProductPageClientProps = {
-  initialProduct?: Product
+  initialProduct: Product
   initialCategory?: Category
   initialRecommendedAccessories: Product[]
   initialRelatedProducts: Product[]
-  initialHasError: boolean
 }
 
 export default function ProductPageClient({
@@ -47,15 +46,12 @@ export default function ProductPageClient({
   initialCategory,
   initialRecommendedAccessories,
   initialRelatedProducts,
-  initialHasError,
 }: ProductPageClientProps) {
   const router = useRouter()
-  const [product] = useState<Product | undefined>(initialProduct)
+  const [product] = useState<Product>(initialProduct)
   const [category] = useState<Category | undefined>(initialCategory)
   const [recommendedAccessories] = useState<Product[]>(initialRecommendedAccessories)
   const [relatedProducts] = useState<Product[]>(initialRelatedProducts)
-  const [isLoading] = useState(false)
-  const [hasError] = useState(initialHasError)
   const [quantity, setQuantity] = useState(1)
   const [quickOrderOpen, setQuickOrderOpen] = useState(false)
   const [quickOrderLoading, setQuickOrderLoading] = useState(false)
@@ -109,57 +105,6 @@ export default function ProductPageClient({
     },
     [product?.serviceInfo],
   )
-
-  if (isLoading) {
-    return (
-      <>
-        <Header />
-        <main className="flex-1">
-          <div className="container mx-auto px-4 py-16 text-center">
-            <p className="text-muted-foreground">Загрузка товара...</p>
-          </div>
-        </main>
-        <Footer />
-      </>
-    )
-  }
-
-  if (hasError) {
-    return (
-      <>
-        <Header />
-        <main className="flex-1">
-          <div className="container mx-auto px-4 py-16 text-center">
-            <h1 className="text-2xl font-bold mb-4">Ошибка загрузки товара</h1>
-            <p className="text-muted-foreground mb-6">
-              Не удалось получить данные из API. Попробуйте обновить страницу.
-            </p>
-          </div>
-        </main>
-        <Footer />
-      </>
-    )
-  }
-
-  if (!product) {
-    return (
-      <>
-        <Header />
-        <main className="flex-1">
-          <div className="container mx-auto px-4 py-16 text-center">
-            <h1 className="text-2xl font-bold mb-4">Товар не найден</h1>
-            <p className="text-muted-foreground mb-6">
-              К сожалению, запрашиваемый товар не существует или был удален.
-            </p>
-            <Button asChild>
-              <Link href="/catalog">Перейти в каталог</Link>
-            </Button>
-          </div>
-        </main>
-        <Footer />
-      </>
-    )
-  }
 
   const discount = product.oldPrice ? calculateDiscount(product.price, product.oldPrice) : 0
   const inCart = isInCart(product.id)
