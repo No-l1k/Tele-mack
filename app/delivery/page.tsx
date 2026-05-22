@@ -3,7 +3,7 @@ import { Footer } from '@/components/layout/footer'
 import { Breadcrumbs } from '@/components/ui/breadcrumbs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Truck, MapPin, Clock, CreditCard, Package, CheckCircle, Globe } from 'lucide-react'
-import { DEFAULT_MIN_ORDER_AMOUNT_RUB } from '@/lib/constants'
+import { DEFAULT_MIN_ORDER_AMOUNT_RUB, PICKUP_ADDRESS } from '@/lib/constants'
 import { formatPrice } from '@/lib/formatters'
 
 export const metadata = {
@@ -90,7 +90,7 @@ export default function DeliveryPage() {
                       Адрес пункта выдачи:
                     </p>
                     <p className="font-medium">
-                      г. Москва, ул. Прасковьина, 21
+                      {PICKUP_ADDRESS}
                     </p>
                   </div>
                 </CardContent>

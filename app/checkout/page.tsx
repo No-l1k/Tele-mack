@@ -24,6 +24,7 @@ import { saveOrderAccess } from '@/lib/order-access'
 import { isCompleteRuPhone } from '@/lib/phone'
 import {
   DEFAULT_MIN_ORDER_AMOUNT_RUB,
+  PICKUP_ADDRESS,
   resolveMinOrderAmountRub,
 } from '@/lib/constants'
 import {
@@ -356,7 +357,7 @@ export default function CheckoutPage() {
                             Самовывоз
                           </Label>
                           <p className="text-sm text-muted-foreground mt-1">
-                            Забрать заказ можно по адресу: г. Москва, ул. Примерная, д. 1
+                            Забрать заказ можно по адресу: {PICKUP_ADDRESS}
                           </p>
                         </div>
                         <div className="font-medium">+ 0 руб</div>
@@ -369,7 +370,7 @@ export default function CheckoutPage() {
                           <Label htmlFor="street">Улица *</Label>
                           <Input
                             id="street"
-                            placeholder="ул. Примерная"
+                            placeholder="Название улицы"
                             value={formData.street}
                             onChange={e => updateField('street', e.target.value)}
                             className={errors.street ? 'border-destructive' : ''}

@@ -2,9 +2,4 @@
 
 cd /opt/rassel_shop
 git pull
-docker compose --env-file .env.server -f docker-compose.server.yml up -d --build --force-recreate
-
-# Если API «мёртвый» — диагностика (см. deploy/PROD_API.md):
-#   bash deploy/check-prod-api.sh
-#   curl -s http://127.0.0.1:8000/health
-#   curl -s https://tele-makc.ru/api/public/settings
+docker compose --env-file .env.server -f docker-compose.server.yml up -d --build
