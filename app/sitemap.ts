@@ -31,6 +31,30 @@ async function fetchApiData<T>(apiBaseUrl: string, endpoint: string, fallback: T
   }
 }
 
+const EMPTY_PRODUCTS_PAGE: PaginatedProducts = { data: [], totalPages: 1, page: 1 }
+
+/** /products отдаёт пагинацию в корне JSON, не в обёртке ApiResponse — читаем ответ целиком. */
+async function fetchProductsPage(
+  apiBaseUrl: string,
+  page: number,
+  pageSize: number,
+): Promise<PaginatedProducts> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15000)
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/products?page=${page}&page_size=${pageSize}`,
+      { signal: controller.signal, next: { revalidate: 3600 } },
+    )
+    if (!response.ok) return EMPTY_PRODUCTS_PAGE
+    return (await response.json()) as PaginatedProducts
+  } catch {
+    return EMPTY_PRODUCTS_PAGE
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 async function fetchAllProducts(apiBaseUrl: string): Promise<Product[]> {
   const pageSize = 100
   let page = 1
@@ -38,11 +62,7 @@ async function fetchAllProducts(apiBaseUrl: string): Promise<Product[]> {
   const result: Product[] = []
 
   while (page <= totalPages) {
-    const response = await fetchApiData<PaginatedProducts>(
-      apiBaseUrl,
-      `/products?page=${page}&page_size=${pageSize}`,
-      { data: [], totalPages: 1, page: 1 },
-    )
+    const response = await fetchProductsPage(apiBaseUrl, page, pageSize)
     result.push(...(response.data ?? []))
     totalPages = Math.max(1, Number(response.totalPages || 1))
     page += 1

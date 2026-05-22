@@ -2,4 +2,3 @@
 
 cd /opt/rassel_shop
 git pull
-docker compose --env-file .env.server -f docker-compose.server.yml up -d --build

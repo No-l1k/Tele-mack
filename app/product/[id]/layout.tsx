@@ -30,10 +30,7 @@ export async function generateMetadata({
   if (!product) {
     return {
       title: 'Товар не найден',
-      robots: {
-        index: false,
-        follow: false,
-      },
+      robots: { index: false, follow: false },
     }
   }
 

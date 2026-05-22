@@ -252,13 +252,13 @@ export default function ContactsPage() {
             </Card>
           </div>
 
-          <Card className="mt-6">
+          <Card className="mx-auto mt-6 w-full max-w-3xl">
             <CardHeader>
               <CardTitle>Как нас найти</CardTitle>
             </CardHeader>
             <CardContent className="min-w-0">
               {/* min-w-0 + max-w-full у iframe: иначе виджет Яндекса может задать min-width и вынести страницу за край экрана */}
-              <div className="relative w-full min-w-0 max-w-full overflow-hidden rounded-lg border">
+              <div className="relative w-full min-w-0 overflow-hidden rounded-lg border">
                 <iframe
                   src="https://yandex.ru/map-widget/v1/?um=constructor%3A32c58273987773c9dc294bbd7649830bbc12dd09da0cafa4be5a8af8866eb7ca&source=constructor"
                   className="block h-[min(520px,65vh)] w-full max-w-full min-w-0 border-0 sm:h-[520px]"

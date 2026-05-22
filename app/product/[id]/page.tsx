@@ -1,4 +1,4 @@
-import { permanentRedirect } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import {
   getCategoryBySlug,
   getProductByIdOrSlug,
@@ -22,15 +22,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       permanentRedirect(productPagePath(product.slug))
     }
     if (!product) {
-      return (
-        <ProductPageClient
-          initialProduct={undefined}
-          initialCategory={undefined}
-          initialRecommendedAccessories={[]}
-          initialRelatedProducts={[]}
-          initialHasError={false}
-        />
-      )
+      notFound()
     }
 
     const [category, accessories, related] = await Promise.all([
