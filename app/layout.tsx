@@ -11,6 +11,7 @@ import { fetchPublicSettings } from '@/lib/server-store'
 import { buildSiteJsonLdGraph } from '@/lib/json-ld'
 import { JsonLdScript } from '@/components/seo/json-ld'
 import { YandexMetrikaFromEnv } from '@/components/analytics/yandex-metrika'
+import { JivoChat } from '@/components/chat/jivo-chat'
 import './globals.css'
 
 const inter = Inter({ 
@@ -112,6 +113,7 @@ export default async function RootLayout({
         </AuthProvider>
         {process.env.NODE_ENV === 'production' && enableVercelAnalytics && <Analytics />}
         {process.env.NODE_ENV === 'production' && <YandexMetrikaFromEnv />}
+        <JivoChat />
       </body>
     </html>
   )
