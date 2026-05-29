@@ -118,6 +118,60 @@ def test_admin_can_update_order_items_and_total():
     assert get_response.json()["data"]["total"] == updated["total"]
 
 
+def test_admin_can_lower_line_price_without_changing_catalog():
+    headers = _admin_headers()
+    product_id = _create_product(headers)
+
+    create_response = client.post(
+        "/api/orders",
+        json={
+            "items": [{"productId": product_id, "quantity": 1}],
+            "phone": "+79000000004",
+            "name": "Discount Buyer",
+            "deliveryMethod": "pickup",
+            "paymentMethod": "cash",
+        },
+    )
+    assert create_response.status_code == 200
+    order_id = create_response.json()["data"]["id"]
+    catalog_total = create_response.json()["data"]["total"]
+
+    discounted_price = 8000
+    update_response = client.put(
+        f"/api/orders/{order_id}",
+        headers=headers,
+        json={
+            "items": [{"productId": product_id, "quantity": 1, "price": discounted_price}],
+            "phone": "+79000000004",
+            "name": "Discount Buyer",
+            "deliveryMethod": "pickup",
+            "paymentMethod": "cash",
+        },
+    )
+    assert update_response.status_code == 200
+    updated = update_response.json()["data"]
+    assert updated["items"][0]["price"] == discounted_price
+    assert updated["total"] == discounted_price
+    assert updated["total"] < catalog_total
+
+    product_response = client.get(f"/api/products/{product_id}")
+    assert product_response.status_code == 200
+    assert product_response.json()["data"]["price"] == 10000
+
+    reject_response = client.put(
+        f"/api/orders/{order_id}",
+        headers=headers,
+        json={
+            "items": [{"productId": product_id, "quantity": 1, "price": 15000}],
+            "phone": "+79000000004",
+            "name": "Discount Buyer",
+            "deliveryMethod": "pickup",
+            "paymentMethod": "cash",
+        },
+    )
+    assert reject_response.status_code == 400
+
+
 def test_products_export_requires_admin_and_returns_csv():
     unauthorized = client.get("/api/products/export")
     assert unauthorized.status_code == 401

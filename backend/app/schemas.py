@@ -132,6 +132,18 @@ class OrderItemCreate(BaseModel):
     quantity: int = Field(default=1, gt=0, le=999)
 
 
+class OrderItemUpdate(BaseModel):
+    """Позиция при редактировании заказа (admin): можно снизить цену только в этом заказе."""
+
+    productId: int
+    quantity: int = Field(default=1, gt=0, le=999)
+    price: int | None = Field(
+        default=None,
+        gt=0,
+        description="Цена за единицу в рублях; не выше цены в каталоге",
+    )
+
+
 class OrderCreate(BaseModel):
     items: list[OrderItemCreate] = Field(min_length=1)
     phone: str
@@ -153,7 +165,7 @@ class OrderCreate(BaseModel):
 class OrderUpdate(BaseModel):
     """Полное обновление заказа (admin)."""
 
-    items: list[OrderItemCreate] = Field(min_length=1)
+    items: list[OrderItemUpdate] = Field(min_length=1)
     phone: str
     name: str
     email: str | None = None

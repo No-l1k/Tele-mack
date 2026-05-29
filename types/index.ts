@@ -175,7 +175,7 @@ export interface PaginatedResponse<T> {
 
 // Form Types
 export interface OrderUpdateData {
-  items: Array<{ productId: string; quantity: number }>
+  items: Array<{ productId: string; quantity: number; price?: number }>
   phone: string
   name: string
   email?: string

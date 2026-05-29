@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..models import OrderItem, Product
 from ..pricing_constants import COURIER_DELIVERY_COST_RUB
-from ..schemas import OrderItemCreate
+from ..schemas import OrderItemCreate, OrderItemUpdate
 from ..services.checkout_services import checkout_services_map_from_settings
 from ..services.products import product_available_for_order
 from ..services.tv_checkout_services import (
@@ -43,12 +43,34 @@ def _checkout_services_map(db: Session, settings_data: dict | None = None) -> di
     return checkout_services_map_from_settings(store)
 
 
+def _resolve_unit_price(
+    product: Product,
+    item: OrderItemCreate | OrderItemUpdate,
+    *,
+    allow_custom_price: bool,
+) -> int:
+    catalog_price = int(product.price)
+    custom_price = getattr(item, "price", None)
+    if custom_price is None:
+        return catalog_price
+    if not allow_custom_price:
+        return catalog_price
+    price = int(custom_price)
+    if price > catalog_price:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Цена «{product.name}» не может быть выше каталожной ({catalog_price} руб.)",
+        )
+    return price
+
+
 def build_order_lines(
     db: Session,
-    items: list[OrderItemCreate],
+    items: list[OrderItemCreate] | list[OrderItemUpdate],
     *,
     check_availability: bool = True,
     lock_products: bool = False,
+    allow_custom_price: bool = False,
 ) -> tuple[list[OrderItem], int, dict[int, Product], dict[int, int]]:
     if not items:
         raise HTTPException(status_code=400, detail="В заказе должен быть хотя бы один товар")
@@ -72,7 +94,7 @@ def build_order_lines(
                 detail=f"Товар «{product.name}» сейчас недоступен для заказа",
             )
 
-        price = int(product.price)
+        price = _resolve_unit_price(product, item, allow_custom_price=allow_custom_price)
         line_total = quantity * price
         subtotal += line_total
         products_by_id[product.id] = product
@@ -127,7 +149,7 @@ def resolve_selected_services(
 def compute_order(
     db: Session,
     *,
-    items: list[OrderItemCreate],
+    items: list[OrderItemCreate] | list[OrderItemUpdate],
     payment_method: str,
     delivery_method: str,
     service_ids: list[str] | None = None,
@@ -135,6 +157,7 @@ def compute_order(
     installation: bool = False,
     check_availability: bool = True,
     lock_products: bool = False,
+    allow_custom_price: bool = False,
     settings_data: dict | None = None,
 ) -> OrderComputation:
     order_items, subtotal, products_by_id, quantities_by_product = build_order_lines(
@@ -142,6 +165,7 @@ def compute_order(
         items,
         check_availability=check_availability,
         lock_products=lock_products,
+        allow_custom_price=allow_custom_price,
     )
 
     selected_services = resolve_selected_services(

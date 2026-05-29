@@ -164,6 +164,7 @@ def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_
         installation=payload.installation,
         check_availability=False,
         lock_products=False,
+        allow_custom_price=True,
     )
 
     order.items.clear()

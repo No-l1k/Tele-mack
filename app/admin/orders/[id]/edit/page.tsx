@@ -25,7 +25,15 @@ import { ArrowLeft, Loader2, Package, Plus, Save, Search, Trash2 } from 'lucide-
 type LineItem = {
   productId: string
   quantity: number
+  /** Цена за единицу в этом заказе (руб.) */
+  unitPrice: number
+  /** Цена в каталоге — верхняя граница для скидки в заказе */
+  catalogPrice: number
   product?: Product
+}
+
+function lineCatalogPrice(product: Product | undefined, fallback: number): number {
+  return product?.price ?? fallback
 }
 
 export default function AdminOrderEditPage() {
@@ -88,11 +96,17 @@ export default function AdminOrderEditPage() {
       )
 
       setLineItems(
-        order.items.map((item) => ({
-          productId: String(item.productId),
-          quantity: item.quantity,
-          product: productsById.get(String(item.productId)),
-        }))
+        order.items.map((item) => {
+          const product = productsById.get(String(item.productId))
+          const catalogPrice = lineCatalogPrice(product, item.price)
+          return {
+            productId: String(item.productId),
+            quantity: item.quantity,
+            unitPrice: Math.min(item.price, catalogPrice),
+            catalogPrice,
+            product,
+          }
+        })
       )
 
       const serviceIds = (order.selectedServices ?? []).map((s) => s.id)
@@ -172,11 +186,7 @@ export default function AdminOrderEditPage() {
   }, [availableServiceIds])
 
   const subtotal = useMemo(
-    () =>
-      lineItems.reduce((sum, line) => {
-        const price = line.product?.price ?? 0
-        return sum + price * line.quantity
-      }, 0),
+    () => lineItems.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
     [lineItems]
   )
 
@@ -196,12 +206,25 @@ export default function AdminOrderEditPage() {
     )
   }
 
+  const updateUnitPrice = (productId: string, rawValue: string) => {
+    const parsed = parseInt(rawValue, 10)
+    if (!Number.isFinite(parsed) || parsed < 1) return
+    setLineItems((prev) =>
+      prev.map((line) => {
+        if (line.productId !== productId) return line
+        const capped = Math.min(parsed, line.catalogPrice)
+        return { ...line, unitPrice: capped }
+      })
+    )
+  }
+
   const removeLine = (productId: string) => {
     setLineItems((prev) => prev.filter((line) => line.productId !== productId))
   }
 
   const addProduct = (product: Product) => {
     const pid = String(product.id)
+    const catalogPrice = product.price
     setLineItems((prev) => {
       const existing = prev.find((line) => line.productId === pid)
       if (existing) {
@@ -209,7 +232,16 @@ export default function AdminOrderEditPage() {
           line.productId === pid ? { ...line, quantity: line.quantity + 1 } : line
         )
       }
-      return [...prev, { productId: pid, quantity: 1, product }]
+      return [
+        ...prev,
+        {
+          productId: pid,
+          quantity: 1,
+          unitPrice: catalogPrice,
+          catalogPrice,
+          product,
+        },
+      ]
     })
     setProductSearch('')
     setSearchResults([])
@@ -224,6 +256,13 @@ export default function AdminOrderEditPage() {
       setError('Укажите имя и телефон покупателя')
       return
     }
+    const invalidPrice = lineItems.find(
+      (line) => line.unitPrice < 1 || line.unitPrice > line.catalogPrice
+    )
+    if (invalidPrice) {
+      setError('Проверьте цены: скидка возможна только в пределах цены в каталоге')
+      return
+    }
 
     setIsSaving(true)
     setError(null)
@@ -232,6 +271,7 @@ export default function AdminOrderEditPage() {
         items: lineItems.map((line) => ({
           productId: line.productId,
           quantity: line.quantity,
+          ...(line.unitPrice < line.catalogPrice ? { price: line.unitPrice } : {}),
         })),
         phone: formData.phone,
         name: formData.name,
@@ -271,7 +311,8 @@ export default function AdminOrderEditPage() {
         <div>
           <h1 className="text-2xl font-bold">Редактирование заказа #{id}</h1>
           <p className="text-muted-foreground text-sm">
-            После сохранения товарный чек обновится автоматически
+            После сохранения товарный чек обновится автоматически. Цену можно снизить только
+            в этом заказе — каталог не меняется.
           </p>
         </div>
       </div>
@@ -316,12 +357,27 @@ export default function AdminOrderEditPage() {
                     {line.product?.name ?? `Товар #${line.productId}`}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {line.product ? formatPrice(line.product.price) : '—'} за шт.
+                    В каталоге: {formatPrice(line.catalogPrice)}
+                    {line.unitPrice < line.catalogPrice ? ' · скидка в заказе' : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor={`qty-${line.productId}`} className="sr-only">
-                    Количество
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor={`price-${line.productId}`} className="text-xs">
+                    Цена, руб.
+                  </Label>
+                  <Input
+                    id={`price-${line.productId}`}
+                    type="number"
+                    min={1}
+                    max={line.catalogPrice}
+                    className="w-28"
+                    value={line.unitPrice}
+                    onChange={(e) => updateUnitPrice(line.productId, e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor={`qty-${line.productId}`} className="text-xs">
+                    Кол-во
                   </Label>
                   <Input
                     id={`qty-${line.productId}`}
@@ -335,10 +391,8 @@ export default function AdminOrderEditPage() {
                     }
                   />
                 </div>
-                <p className="font-semibold min-w-[100px] text-right">
-                  {line.product
-                    ? formatPrice(line.product.price * line.quantity)
-                    : '—'}
+                <p className="font-semibold min-w-[100px] text-right self-end pb-2">
+                  {formatPrice(line.unitPrice * line.quantity)}
                 </p>
                 <Button
                   type="button"
