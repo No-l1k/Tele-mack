@@ -150,6 +150,25 @@ class OrderCreate(BaseModel):
     becomeCustomer: bool = False
 
 
+class OrderUpdate(BaseModel):
+    """Полное обновление заказа (admin)."""
+
+    items: list[OrderItemCreate] = Field(min_length=1)
+    phone: str
+    name: str
+    email: str | None = None
+    city: str | None = None
+    street: str | None = None
+    house: str | None = None
+    apartment: str | None = None
+    deliveryMethod: str = "courier"
+    paymentMethod: str = "cash"
+    comment: str | None = None
+    serviceIds: list[str] = Field(default_factory=list)
+    pixelCheck: bool = False
+    installation: bool = False
+
+
 class OrderStatusUpdate(BaseModel):
     status: str
 

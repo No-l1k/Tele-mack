@@ -174,6 +174,23 @@ export interface PaginatedResponse<T> {
 }
 
 // Form Types
+export interface OrderUpdateData {
+  items: Array<{ productId: string; quantity: number }>
+  phone: string
+  name: string
+  email?: string
+  city?: string
+  street?: string
+  house?: string
+  apartment?: string
+  comment?: string
+  deliveryMethod: DeliveryMethod
+  paymentMethod: PaymentMethod
+  serviceIds?: string[]
+  pixelCheck?: boolean
+  installation?: boolean
+}
+
 export interface CheckoutFormData {
   phone: string
   name: string

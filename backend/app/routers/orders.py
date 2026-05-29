@@ -9,36 +9,25 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from ..database import get_db
 from ..config import settings
 from ..deps import get_current_admin, get_current_user
-from ..models import Order, OrderItem, Product, Setting, User
-from ..schemas import ApiResponse, OrderCreate, OrderPublicLookupIn, OrderStatusUpdate
+from ..models import Order, OrderItem, User
+from ..schemas import ApiResponse, OrderCreate, OrderPublicLookupIn, OrderStatusUpdate, OrderUpdate
 from ..services.csv_export import excel_csv_response
 from ..services.notifications import email_notifications_enabled, send_new_order_email
+from ..services.order_computation import compute_order
 from ..services.orders import order_to_dict
-from ..services.products import product_available_for_order
 from ..services.order_numbers import allocate_next_order_id
 from ..services.store_settings import min_order_subtotal_rub
-from ..services.checkout_services import checkout_services_map_from_settings
-from ..services.tv_checkout_services import (
-    LEGACY_TV_CHECKOUT_SERVICE_IDS,
-    resolve_tv_checkout_service,
-)
-from ..pricing_constants import COURIER_DELIVERY_COST_RUB
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 logger = logging.getLogger(__name__)
 ALLOWED_ORDER_STATUSES = {"pending", "confirmed", "processing", "shipped", "delivered", "cancelled"}
 ALLOWED_PAYMENT_METHODS = {"cash", "card", "pickup"}
 ALLOWED_DELIVERY_METHODS = {"courier", "pickup"}
-COURIER_DELIVERY_COST = COURIER_DELIVERY_COST_RUB
+
+
 def _public_order_token(order: Order) -> str:
     payload = f"{order.id}:{order.customer_phone or ''}:{settings.secret_key}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def _checkout_services_map(db: Session) -> dict[str, dict[str, object]]:
-    row = db.query(Setting).filter(Setting.key == "store").first()
-    settings_data = dict(row.value or {}) if row else {}
-    return checkout_services_map_from_settings(settings_data)
 
 
 def _normalize_phone(value: str | None) -> str:
@@ -84,79 +73,25 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid payment method")
     if payload.deliveryMethod not in ALLOWED_DELIVERY_METHODS:
         raise HTTPException(status_code=400, detail="Invalid delivery method")
-    subtotal = 0
-    lines: list[tuple[Product, int, int, int]] = []
-    for item in payload.items:
-        quantity = item.quantity
-        product = db.query(Product).filter(Product.id == item.productId).with_for_update().first()
-        if not product:
-            raise HTTPException(status_code=400, detail=f"Product not found: {item.productId}")
-        if not product_available_for_order(product):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Товар «{product.name}» сейчас недоступен для заказа",
-            )
 
-        price = int(product.price)
-        line_total = quantity * price
-        subtotal += line_total
-        lines.append((product, quantity, price, line_total))
+    computed = compute_order(
+        db,
+        items=payload.items,
+        payment_method=payload.paymentMethod,
+        delivery_method=payload.deliveryMethod,
+        service_ids=payload.serviceIds,
+        pixel_check=payload.pixelCheck,
+        installation=payload.installation,
+        check_availability=True,
+        lock_products=True,
+    )
 
     min_sum = min_order_subtotal_rub(db)
-    if subtotal < min_sum:
+    if computed.subtotal < min_sum:
         raise HTTPException(
             status_code=400,
-            detail=f"Минимальная сумма заказа {min_sum} руб. (сейчас товаров на {subtotal} руб.)",
+            detail=f"Минимальная сумма заказа {min_sum} руб. (сейчас товаров на {computed.subtotal} руб.)",
         )
-
-    order_items: list[OrderItem] = []
-    for product, quantity, price, line_total in lines:
-        images = (product.specs or {}).get("images", [])
-        order_items.append(
-            OrderItem(
-                product_id=product.id,
-                product_name=product.name,
-                product_image=images[0] if images else None,
-                product_sku=(product.sku or "").strip() or None,
-                price=price,
-                quantity=quantity,
-                total=line_total,
-            )
-        )
-
-    surcharge = 0
-    if payload.paymentMethod == "card":
-        surcharge = int(subtotal * 0.15)
-    services_map = _checkout_services_map(db)
-    selected_service_ids = set(payload.serviceIds or [])
-    # Legacy compatibility for old frontend payloads.
-    if payload.pixelCheck:
-        selected_service_ids.add("pixel-check")
-    if payload.installation:
-        selected_service_ids.add("installation")
-
-    products_by_id = {product.id: product for product, *_ in lines}
-    quantities_by_product: dict[int, int] = {}
-    for product, quantity, *_ in lines:
-        quantities_by_product[product.id] = quantities_by_product.get(product.id, 0) + quantity
-
-    selected_services: list[dict[str, object]] = []
-    for service_id in selected_service_ids:
-        tv_service = resolve_tv_checkout_service(service_id, products_by_id, quantities_by_product)
-        if tv_service:
-            selected_services.append(tv_service)
-            continue
-        static_service = services_map.get(service_id)
-        if static_service and service_id not in LEGACY_TV_CHECKOUT_SERVICE_IDS:
-            selected_services.append(static_service)
-
-    services_total = sum(int(service["price"]) for service in selected_services)
-    has_tv_pixel = any(str(s.get("id", "")).startswith("tv-pixel:") for s in selected_services)
-    has_tv_install = any(str(s.get("id", "")).startswith("tv-install:") for s in selected_services)
-    delivery_cost = 0
-    if payload.deliveryMethod == "courier":
-        delivery_cost = COURIER_DELIVERY_COST
-    total = subtotal + surcharge + services_total + delivery_cost
     order_user_id = None
     if payload.becomeCustomer:
         existing = db.query(User).filter(User.phone == payload.phone).first()
@@ -172,7 +107,7 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         id=allocate_next_order_id(db),
         user_id=order_user_id,
         status="pending",
-        total=total,
+        total=computed.total,
         payment_status="pending",
         delivery_method=payload.deliveryMethod,
         payment_method=payload.paymentMethod,
@@ -184,11 +119,11 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         address_house=payload.house,
         address_apartment=payload.apartment,
         comment=payload.comment,
-        pixel_check=has_tv_pixel or ("pixel-check" in selected_service_ids) or payload.pixelCheck,
-        installation=has_tv_install or ("installation" in selected_service_ids) or payload.installation,
-        selected_services=selected_services,
-        services_total=services_total,
-        items=order_items,
+        pixel_check=computed.pixel_check,
+        installation=computed.installation,
+        selected_services=computed.selected_services,
+        services_total=computed.services_total,
+        items=computed.order_items,
     )
     db.add(order)
     db.commit()
@@ -201,6 +136,61 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
     data = order_to_dict(order)
     data["publicToken"] = _public_order_token(order)
     return ApiResponse(data=data)
+
+
+@router.put("/{order_id}", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])
+def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_db)):
+    if payload.paymentMethod not in ALLOWED_PAYMENT_METHODS:
+        raise HTTPException(status_code=400, detail="Invalid payment method")
+    if payload.deliveryMethod not in ALLOWED_DELIVERY_METHODS:
+        raise HTTPException(status_code=400, detail="Invalid delivery method")
+
+    order = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    computed = compute_order(
+        db,
+        items=payload.items,
+        payment_method=payload.paymentMethod,
+        delivery_method=payload.deliveryMethod,
+        service_ids=payload.serviceIds,
+        pixel_check=payload.pixelCheck,
+        installation=payload.installation,
+        check_availability=False,
+        lock_products=False,
+    )
+
+    order.items.clear()
+    for item in computed.order_items:
+        item.order_id = order.id
+        order.items.append(item)
+
+    order.total = computed.total
+    order.delivery_method = payload.deliveryMethod
+    order.payment_method = payload.paymentMethod
+    order.customer_name = payload.name
+    order.customer_phone = payload.phone
+    order.customer_email = payload.email
+    order.address_city = payload.city
+    order.address_street = payload.street
+    order.address_house = payload.house
+    order.address_apartment = payload.apartment
+    order.comment = payload.comment
+    order.pixel_check = computed.pixel_check
+    order.installation = computed.installation
+    order.selected_services = computed.selected_services
+    order.services_total = computed.services_total
+    order.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(order)
+    return ApiResponse(data=order_to_dict(order))
 
 
 @router.put("/{order_id}/status", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])

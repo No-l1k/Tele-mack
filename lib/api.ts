@@ -15,6 +15,7 @@ import type {
   Review,
   ProductFilters,
   CheckoutFormData,
+  OrderUpdateData,
   PaginatedResponse,
   ApiResponse,
   DashboardStats,
@@ -416,6 +417,16 @@ export const ordersApi = {
   create: (data: CheckoutFormData & { items: Array<{ productId: string; quantity: number }> }): Promise<ApiResponse<Order>> => {
     return fetchApi('/orders', {
       method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  /**
+   * PUT /orders/:id - Полное редактирование заказа (admin)
+   */
+  update: (id: string, data: OrderUpdateData): Promise<ApiResponse<Order>> => {
+    return fetchApi(`/orders/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data),
     })
   },

@@ -25,6 +25,7 @@ import {
   CreditCard,
   Truck,
   Printer,
+  Pencil,
 } from 'lucide-react'
 import { notFound, useParams } from 'next/navigation'
 import type { Order, OrderStatus } from '@/types'
@@ -126,6 +127,12 @@ export default function AdminOrderDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Button variant="outline" asChild>
+            <Link href={`/admin/orders/${id}/edit`}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Редактировать
+            </Link>
+          </Button>
           <Button variant="outline" asChild>
             <Link href={`/admin/orders/${id}/print`}>
               <Printer className="h-4 w-4 mr-2" />
