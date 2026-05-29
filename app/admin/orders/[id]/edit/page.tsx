@@ -443,7 +443,7 @@ export default function AdminOrderEditPage() {
               <PhoneInput
                 id="phone"
                 value={formData.phone}
-                onChange={(value) => setFormData((p) => ({ ...p, phone: value }))}
+                onValueChange={(value) => setFormData((p) => ({ ...p, phone: value }))}
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
