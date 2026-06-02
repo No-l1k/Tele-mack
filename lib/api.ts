@@ -58,6 +58,7 @@ type CategoryCreatePayload = Omit<Category, 'id' | 'productCount' | 'children' |
 
 type CategoryUpdatePayload = Partial<Omit<Category, 'children' | 'parentId'>> & {
   parentId?: number | null
+  image?: string | null
 }
 
 function formatApiErrorBody(body: unknown): string {

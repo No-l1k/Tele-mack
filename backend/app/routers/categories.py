@@ -190,7 +190,7 @@ def update_category(category_id: int, payload: CategoryUpdateIn, db: Session = D
             if _is_descendant(db, possible_child_id=payload.parentId, possible_parent_id=category.id):
                 raise HTTPException(status_code=400, detail="Category hierarchy cycle is not allowed")
         category.parent_id = payload.parentId
-    if payload.image is not None:
+    if "image" in payload.model_fields_set:
         category.image = payload.image
     if payload.description is not None:
         category.description = payload.description

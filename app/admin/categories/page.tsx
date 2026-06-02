@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { categoriesApi } from '@/lib/api'
 import type { Category } from '@/types'
-import { Plus, Pencil, Trash2, Tags } from 'lucide-react'
+import { Plus, Pencil, Trash2, Image as ImageIcon } from 'lucide-react'
 
 const slugify = (value: string) =>
   value
@@ -44,16 +44,15 @@ export default function AdminCategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
-  const [image, setImage] = useState('')
   const [parentId, setParentId] = useState('')
   const [editName, setEditName] = useState('')
   const [editSlug, setEditSlug] = useState('')
-  const [editImage, setEditImage] = useState('')
   const [editParentId, setEditParentId] = useState('')
   const [showOnHome, setShowOnHome] = useState(false)
   const [editShowOnHome, setEditShowOnHome] = useState(false)
   const [newImageFile, setNewImageFile] = useState<File | null>(null)
   const [editImageFile, setEditImageFile] = useState<File | null>(null)
+  const [removeEditImage, setRemoveEditImage] = useState(false)
 
   const categoriesWithCount = useMemo(() => categories, [categories])
 
@@ -76,7 +75,6 @@ export default function AdminCategoriesPage() {
       const createdResponse = await categoriesApi.create({
         name,
         slug: slugify(slug || name),
-        image,
         order: categories.length + 1,
         parentId: parentId ? Number(parentId) : undefined,
         showOnHome,
@@ -87,7 +85,6 @@ export default function AdminCategoriesPage() {
       }
       setName('')
       setSlug('')
-      setImage('')
       setParentId('')
       setShowOnHome(false)
       setNewImageFile(null)
@@ -103,9 +100,10 @@ export default function AdminCategoriesPage() {
     setEditingCategory(category)
     setEditName(category.name)
     setEditSlug(category.slug)
-    setEditImage(category.image || '')
     setEditParentId(category.parentId || '')
     setEditShowOnHome(Boolean(category.showOnHome))
+    setRemoveEditImage(false)
+    setEditImageFile(null)
     setIsEditDialogOpen(true)
   }
 
@@ -113,13 +111,17 @@ export default function AdminCategoriesPage() {
     e.preventDefault()
     if (!editingCategory) return
     try {
-      await categoriesApi.update(editingCategory.id, {
+      const payload: Parameters<typeof categoriesApi.update>[1] = {
         name: editName,
         slug: slugify(editSlug || editName),
-        image: editImage || undefined,
         parentId: editParentId ? Number(editParentId) : null,
         showOnHome: editShowOnHome,
-      })
+      }
+      if (removeEditImage) {
+        payload.image = null
+      }
+
+      await categoriesApi.update(editingCategory.id, payload)
       if (editImageFile) {
         await categoriesApi.uploadImage(editingCategory.id, editImageFile)
       }
@@ -176,12 +178,9 @@ export default function AdminCategoriesPage() {
                 <Input id="slug" placeholder="televizory" value={slug} onChange={(e) => setSlug(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="icon">Иконка (URL)</Label>
-                <Input id="icon" placeholder="https://..." value={image} onChange={(e) => setImage(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="icon-file">Иконка (файл)</Label>
+                <Label htmlFor="icon-file">Картинка категории</Label>
                 <Input id="icon-file" type="file" accept="image/*" onChange={(e) => setNewImageFile(e.target.files?.[0] ?? null)} />
+                <p className="text-xs text-muted-foreground">Выберите изображение с компьютера (JPG, PNG, WEBP).</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="parent">Родительская категория (подкатегория)</Label>
@@ -243,13 +242,34 @@ export default function AdminCategoriesPage() {
                 <Input id="edit-slug" value={editSlug} onChange={(e) => setEditSlug(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-image">Иконка (URL)</Label>
-                <Input id="edit-image" value={editImage} onChange={(e) => setEditImage(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-image-file">Иконка (файл)</Label>
+                <Label htmlFor="edit-image-file">Картинка категории</Label>
                 <Input id="edit-image-file" type="file" accept="image/*" onChange={(e) => setEditImageFile(e.target.files?.[0] ?? null)} />
+                <p className="text-xs text-muted-foreground">Выберите новый файл, чтобы заменить текущее изображение.</p>
               </div>
+              {editingCategory?.image && !removeEditImage && !editImageFile && (
+                <div className="space-y-2">
+                  <Label>Текущее изображение</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="h-16 w-16 rounded-md border overflow-hidden bg-muted">
+                      <ProductImage
+                        src={editingCategory.image}
+                        alt={editingCategory.name}
+                        width={64}
+                        height={64}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <Button type="button" variant="outline" onClick={() => setRemoveEditImage(true)}>
+                      Удалить картинку
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {removeEditImage && (
+                <p className="text-sm text-amber-600">
+                  Изображение будет удалено после сохранения.
+                </p>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="edit-parent">Родительская категория</Label>
                 <select
@@ -318,7 +338,7 @@ export default function AdminCategoriesPage() {
                             className="object-contain"
                           />
                         ) : (
-                          <Tags className="h-5 w-5 text-muted-foreground" />
+                          <ImageIcon className="h-5 w-5 text-muted-foreground" />
                         )}
                       </div>
                     </TableCell>
