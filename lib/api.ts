@@ -52,8 +52,9 @@ interface ProductWritePayload {
   images: string[]
 }
 
-type CategoryCreatePayload = Omit<Category, 'id' | 'productCount' | 'children' | 'parentId'> & {
+type CategoryCreatePayload = Omit<Category, 'id' | 'productCount' | 'children' | 'parentId' | 'image'> & {
   parentId?: number
+  image?: string | null
 }
 
 type CategoryUpdatePayload = Partial<Omit<Category, 'children' | 'parentId'>> & {
