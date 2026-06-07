@@ -16,8 +16,8 @@ ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 ARG NEXT_PUBLIC_YANDEX_METRIKA_ID=
 ENV NEXT_PUBLIC_YANDEX_METRIKA_ID=${NEXT_PUBLIC_YANDEX_METRIKA_ID}
-# Только на этапе сборки (в финальный образ не попадает)
-ENV API_URL_INTERNAL=http://127.0.0.1:8000/api
+# Backend во время docker build недоступен — не задаём API_URL_INTERNAL
+ENV NODE_OPTIONS=--max-old-space-size=1536
 
 RUN npm run build
 

@@ -20,6 +20,8 @@ export async function generateMetadata({ params }: BrandPageProps): Promise<Meta
   }
 }
 
+export const dynamic = 'force-dynamic'
+
 export default async function BrandCatalogPage({ params }: BrandPageProps) {
   const { brand } = await params
   const brandName = decodeURIComponent(brand)

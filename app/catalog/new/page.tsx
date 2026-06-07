@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   description: 'Новые поступления товаров в каталоге.',
 }
 
+export const dynamic = 'force-dynamic'
+
 export default async function NewProductsPage() {
   const pageSize = 30
   const filters = { isNew: true as const }

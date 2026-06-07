@@ -1,5 +1,5 @@
 import type { Category, Product, ProductFilters } from '@/types'
-import { getApiBaseUrl } from '@/lib/api-base-url'
+import { fetchFromApi } from '@/lib/server-fetch'
 
 type ApiEnvelope<T> = {
   data: T
@@ -43,9 +43,15 @@ function normalizeCategory(category: Category): Category {
 }
 
 async function apiGet<T>(endpoint: string): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
+  const response = await fetchFromApi(endpoint, {
     next: { revalidate: 60 },
   })
+
+  if (!response) {
+    const error = new Error('API unavailable') as Error & { status?: number }
+    error.status = 503
+    throw error
+  }
 
   if (!response.ok) {
     const error = new Error(`API request failed: ${response.status}`) as Error & { status?: number }

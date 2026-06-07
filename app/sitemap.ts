@@ -1,6 +1,7 @@
 import { MetadataRoute } from 'next'
 import { siteConfig } from '@/lib/site'
-import { getApiBaseUrl } from '@/lib/api-base-url'
+import { isNextProductionBuild } from '@/lib/api-base-url'
+import { fetchFromApi } from '@/lib/server-fetch'
 
 type ApiEnvelope<T> = { data: T }
 type Category = { slug: string }
@@ -13,56 +14,43 @@ type PaginatedProducts = {
 
 export const dynamic = 'force-dynamic'
 
-async function fetchApiData<T>(apiBaseUrl: string, endpoint: string, fallback: T): Promise<T> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 3000)
+async function fetchApiData<T>(endpoint: string, fallback: T): Promise<T> {
   try {
-    const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-      signal: controller.signal,
+    const response = await fetchFromApi(endpoint, {
       next: { revalidate: 3600 },
     })
-    if (!response.ok) return fallback
+    if (!response?.ok) return fallback
     const json = (await response.json()) as ApiEnvelope<T>
     return json.data ?? fallback
   } catch {
     return fallback
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
 const EMPTY_PRODUCTS_PAGE: PaginatedProducts = { data: [], totalPages: 1, page: 1 }
 
 /** /products отдаёт пагинацию в корне JSON, не в обёртке ApiResponse — читаем ответ целиком. */
-async function fetchProductsPage(
-  apiBaseUrl: string,
-  page: number,
-  pageSize: number,
-): Promise<PaginatedProducts> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15000)
+async function fetchProductsPage(page: number, pageSize: number): Promise<PaginatedProducts> {
   try {
-    const response = await fetch(
-      `${apiBaseUrl}/products?page=${page}&page_size=${pageSize}`,
-      { signal: controller.signal, next: { revalidate: 3600 } },
+    const response = await fetchFromApi(
+      `/products?page=${page}&page_size=${pageSize}`,
+      { next: { revalidate: 3600 } },
     )
-    if (!response.ok) return EMPTY_PRODUCTS_PAGE
+    if (!response?.ok) return EMPTY_PRODUCTS_PAGE
     return (await response.json()) as PaginatedProducts
   } catch {
     return EMPTY_PRODUCTS_PAGE
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
-async function fetchAllProducts(apiBaseUrl: string): Promise<Product[]> {
+async function fetchAllProducts(): Promise<Product[]> {
   const pageSize = 100
   let page = 1
   let totalPages = 1
   const result: Product[] = []
 
   while (page <= totalPages) {
-    const response = await fetchProductsPage(apiBaseUrl, page, pageSize)
+    const response = await fetchProductsPage(page, pageSize)
     result.push(...(response.data ?? []))
     totalPages = Math.max(1, Number(response.totalPages || 1))
     page += 1
@@ -73,11 +61,21 @@ async function fetchAllProducts(apiBaseUrl: string): Promise<Product[]> {
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = siteConfig.url.replace(/\/+$/, '')
-  const apiBaseUrl = getApiBaseUrl()
+
+  if (isNextProductionBuild()) {
+    return [
+      {
+        url: baseUrl,
+        lastModified: new Date(),
+        changeFrequency: 'weekly',
+        priority: 1,
+      },
+    ]
+  }
 
   const [categories, products] = await Promise.all([
-    fetchApiData<Category[]>(apiBaseUrl, '/categories', []),
-    fetchAllProducts(apiBaseUrl),
+    fetchApiData<Category[]>('/categories', []),
+    fetchAllProducts(),
   ])
 
   // Static pages

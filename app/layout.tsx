@@ -84,6 +84,8 @@ export const viewport: Viewport = {
   ],
 }
 
+export const dynamic = 'force-dynamic'
+
 export default async function RootLayout({
   children,
 }: Readonly<{

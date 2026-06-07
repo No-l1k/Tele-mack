@@ -4,7 +4,7 @@
  * Браузер: `NEXT_PUBLIC_API_URL=/api` → текущий origin (nginx проксирует на FastAPI).
  * SSR в Docker: прямой вызов сервиса backend (см. API_URL_INTERNAL в compose).
  */
-function isNextProductionBuild(): boolean {
+export function isNextProductionBuild(): boolean {
   return process.env.NEXT_PHASE === 'phase-production-build'
 }
 
@@ -26,10 +26,6 @@ export function getApiBaseUrl(): string {
 
   if (pub.startsWith('http')) {
     return pub
-  }
-
-  if (isNextProductionBuild()) {
-    return 'http://127.0.0.1:8000/api'
   }
 
   // next start в docker-compose без API_URL_INTERNAL (редко)

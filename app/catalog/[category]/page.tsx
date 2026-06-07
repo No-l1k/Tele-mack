@@ -8,6 +8,8 @@ type CategoryPageProps = {
 
 const PAGE_SIZE = 24
 
+export const dynamic = 'force-dynamic'
+
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { category: categorySlug } = await params
   const initialFilters: ProductFilters = {
