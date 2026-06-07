@@ -83,6 +83,7 @@ export default function EditProductPage() {
   const [metaTitle, setMetaTitle] = useState('')
   const [metaDescription, setMetaDescription] = useState('')
   const [seoFormTick, setSeoFormTick] = useState(0)
+  const [variantGroup, setVariantGroup] = useState('')
   const serviceInfoEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
 
   useEffect(() => {
@@ -101,6 +102,7 @@ export default function EditProductPage() {
         setServiceInfoHtml(loadedProduct.serviceInfo || '')
         setSlug(loadedProduct.slug || '')
         setCategoryId(String(loadedProduct.categoryId || ''))
+        setVariantGroup(loadedProduct.variantGroup || '')
         setRecommendedAccessoryIds((loadedProduct.recommendedAccessoryIds ?? []).map((id) => String(id)))
         const rows = Object.entries(loadedProduct.specs || {})
           .filter(([key]) => key !== 'images')
@@ -225,6 +227,9 @@ export default function EditProductPage() {
         warrantyType: String(payload.get('warrantyType') || product.warrantyType || '').trim() || undefined,
         serviceInfo: String(payload.get('serviceInfo') ?? serviceInfoHtml).trim() || undefined,
         recommendedAccessoryIds: recommendedAccessoryIds.map((id) => Number(id)),
+        variantGroup: String(payload.get('variantGroup') || '').trim(),
+        variantName: String(payload.get('variantName') || '').trim(),
+        variantValue: String(payload.get('variantValue') || '').trim(),
         metaTitle: normalizeMetaTitleForSave(seoInputForSave, metaTitle),
         metaDescription: normalizeMetaDescriptionForSave(seoInputForSave, metaDescription),
       })
@@ -294,6 +299,14 @@ export default function EditProductPage() {
     .filter((item) => !recommendedAccessoryIds.includes(String(item.id)))
     .filter((item) => item.name.toLowerCase().includes(accessoriesSearch.toLowerCase()))
     .slice(0, 20)
+  const existingVariantGroups = Array.from(
+    new Set(catalogProducts.map((item) => item.variantGroup?.trim()).filter(Boolean) as string[])
+  )
+  const productsInVariantGroup = variantGroup.trim()
+    ? catalogProducts
+        .filter((item) => item.variantGroup?.trim() === variantGroup.trim() && String(item.id) !== String(product.id))
+        .slice(0, 8)
+    : []
 
   const addAccessory = (id: string) => {
     const normalizedId = String(id)
@@ -364,6 +377,68 @@ export default function EditProductPage() {
             </CardContent>
           </Card>
           <ProductSpecsEditor category={selectedCategory} rows={specRows} onChange={setSpecRows} />
+
+          <Card className="border-sky-200/70 bg-sky-50/30 shadow-sm">
+            <CardHeader className="border-b bg-sky-100/40">
+              <CardTitle>Варианты товара</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Объедините одинаковые модели, чтобы на витрине появился переключатель диагоналей.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="variant-group-edit">Код группы вариантов</Label>
+                <Input
+                  id="variant-group-edit"
+                  name="variantGroup"
+                  list="variant-groups-edit"
+                  placeholder="Например samsung-q80c"
+                  value={variantGroup}
+                  onChange={(event) => setVariantGroup(event.target.value)}
+                />
+                <datalist id="variant-groups-edit">
+                  {existingVariantGroups.map((group) => (
+                    <option key={group} value={group} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-muted-foreground">
+                  Укажите одинаковый код у всех размеров одной модели. Если поле пустое, переключатель не показывается.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="variant-name-edit">Название параметра</Label>
+                  <Input
+                    id="variant-name-edit"
+                    name="variantName"
+                    placeholder="Диагональ"
+                    defaultValue={product.variantName || 'Диагональ'}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="variant-value-edit">Значение этого товара</Label>
+                  <Input
+                    id="variant-value-edit"
+                    name="variantValue"
+                    placeholder='55"'
+                    defaultValue={product.variantValue || ''}
+                  />
+                </div>
+              </div>
+              {productsInVariantGroup.length > 0 && (
+                <div className="rounded-md border bg-background p-3">
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">Другие товары в этой группе:</p>
+                  <div className="space-y-1">
+                    {productsInVariantGroup.map((item) => (
+                      <p key={item.id} className="truncate text-sm">
+                        {item.variantValue || 'Без значения'} — {item.name}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <Card className="border-violet-200/70 bg-violet-50/30 shadow-sm">
             <CardHeader className="border-b bg-violet-100/40">

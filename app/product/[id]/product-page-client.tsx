@@ -1,9 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { ProductImage } from '@/components/ui/product-image'
 import { Heart, ShoppingCart, Truck, CheckCircle, BarChart3 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
@@ -28,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { isProductAvailableForPurchase } from '@/lib/product-availability'
 import { isCompleteRuPhone } from '@/lib/phone'
 import { prepareDescriptionHtml, sanitizeDescriptionHtml } from '@/lib/rich-text'
+import { productPagePath } from '@/lib/product-path'
 import { Input } from '@/components/ui/input'
 import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
@@ -39,6 +39,29 @@ type ProductPageClientProps = {
   initialCategory?: Category
   initialRecommendedAccessories: Product[]
   initialRelatedProducts: Product[]
+  initialVariantProducts: Product[]
+}
+
+function prepareHydrationSafeHtml(value: string | undefined): string {
+  return prepareDescriptionHtml(value || '')
+}
+
+function prepareBrowserHtml(value: string | undefined): string {
+  const sanitized = sanitizeDescriptionHtml(prepareDescriptionHtml(value || ''))
+  if (!sanitized || typeof window === 'undefined') return sanitized
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(`<div>${sanitized}</div>`, 'text/html')
+  const root = doc.body.firstElementChild
+  if (!root) return sanitized
+
+  root.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('src')
+    if (!src) return
+    img.setAttribute('src', resolveMediaUrl(src))
+  })
+
+  return root.innerHTML
 }
 
 export default function ProductPageClient({
@@ -46,12 +69,16 @@ export default function ProductPageClient({
   initialCategory,
   initialRecommendedAccessories,
   initialRelatedProducts,
+  initialVariantProducts,
 }: ProductPageClientProps) {
   const router = useRouter()
   const [product] = useState<Product>(initialProduct)
   const [category] = useState<Category | undefined>(initialCategory)
   const [recommendedAccessories] = useState<Product[]>(initialRecommendedAccessories)
   const [relatedProducts] = useState<Product[]>(initialRelatedProducts)
+  const [variantProducts] = useState<Product[]>(initialVariantProducts)
+  const [safeDescriptionHtml, setSafeDescriptionHtml] = useState(() => prepareHydrationSafeHtml(initialProduct.description))
+  const [safeServiceInfoHtml, setSafeServiceInfoHtml] = useState(() => prepareHydrationSafeHtml(initialProduct.serviceInfo))
   const [quantity, setQuantity] = useState(1)
   const [quickOrderOpen, setQuickOrderOpen] = useState(false)
   const [quickOrderLoading, setQuickOrderLoading] = useState(false)
@@ -65,52 +92,25 @@ export default function ProductPageClient({
 
   const { addItem, isInCart } = useCart()
   const { toggleFavorite, isFavorite } = useFavorites()
-  const safeDescriptionHtml = useMemo(
-    () => {
-      const sanitized = sanitizeDescriptionHtml(prepareDescriptionHtml(product?.description || ''))
-      if (!sanitized || typeof window === 'undefined') return sanitized
 
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(`<div>${sanitized}</div>`, 'text/html')
-      const root = doc.body.firstElementChild
-      if (!root) return sanitized
-
-      root.querySelectorAll('img').forEach((img) => {
-        const src = img.getAttribute('src')
-        if (!src) return
-        img.setAttribute('src', resolveMediaUrl(src))
-      })
-
-      return root.innerHTML
-    },
-    [product?.description],
-  )
-  const safeServiceInfoHtml = useMemo(
-    () => {
-      const sanitized = sanitizeDescriptionHtml(prepareDescriptionHtml(product?.serviceInfo || ''))
-      if (!sanitized || typeof window === 'undefined') return sanitized
-
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(`<div>${sanitized}</div>`, 'text/html')
-      const root = doc.body.firstElementChild
-      if (!root) return sanitized
-
-      root.querySelectorAll('img').forEach((img) => {
-        const src = img.getAttribute('src')
-        if (!src) return
-        img.setAttribute('src', resolveMediaUrl(src))
-      })
-
-      return root.innerHTML
-    },
-    [product?.serviceInfo],
-  )
+  useEffect(() => {
+    setSafeDescriptionHtml(prepareBrowserHtml(product.description))
+    setSafeServiceInfoHtml(prepareBrowserHtml(product.serviceInfo))
+  }, [product.description, product.serviceInfo])
 
   const discount = product.oldPrice ? calculateDiscount(product.price, product.oldPrice) : 0
   const inCart = isInCart(product.id)
   const favorite = isFavorite(product.id)
   const cashPrice = product.price
   const cashlessPrice = Math.round(product.price * 1.15)
+  const visibleVariants = useMemo(
+    () =>
+      [...variantProducts]
+        .filter((item) => item.variantGroup && item.variantValue)
+        .sort((a, b) => (a.variantValue || '').localeCompare(b.variantValue || '', 'ru', { numeric: true })),
+    [variantProducts],
+  )
+  const variantLabel = product.variantName || visibleVariants[0]?.variantName || 'Диагональ'
 
   const handleAddToCart = () => {
     if (inCart) {
@@ -226,6 +226,35 @@ export default function ProductPageClient({
               {product.shortDescription && (
                 <p className="text-muted-foreground">{product.shortDescription}</p>
               )}
+
+              {visibleVariants.length > 1 && (
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                  <p className="text-sm font-medium">{variantLabel}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {visibleVariants.map((variant) => {
+                      const isCurrent = String(variant.id) === String(product.id)
+                      return (
+                        <Button
+                          key={variant.id}
+                          asChild={!isCurrent}
+                          type="button"
+                          variant={isCurrent ? 'default' : 'outline'}
+                          size="sm"
+                          className="min-w-14"
+                          disabled={isCurrent}
+                        >
+                          {isCurrent ? (
+                            <span>{variant.variantValue}</span>
+                          ) : (
+                            <Link href={productPagePath(variant.slug)}>{variant.variantValue}</Link>
+                          )}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="text-sm text-muted-foreground space-y-1">
                 {product.sku && <p>Артикул: {product.sku}</p>}
                 {product.gtin && <p>GTIN/EAN: {product.gtin}</p>}

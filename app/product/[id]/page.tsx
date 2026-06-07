@@ -2,6 +2,7 @@ import { notFound, permanentRedirect } from 'next/navigation'
 import {
   getCategoryBySlug,
   getProductByIdOrSlug,
+  getProductVariants,
   getProductsByCategory,
   getProductsByIds,
 } from '@/lib/data/catalog'
@@ -27,10 +28,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound()
   }
 
-  const [category, accessories, related] = await Promise.all([
+  const [category, accessories, related, variants] = await Promise.all([
     getCategoryBySlug(product.categorySlug),
     getProductsByIds(product.recommendedAccessoryIds ?? []),
     getProductsByCategory(product.categorySlug, 8),
+    getProductVariants(product.id),
   ])
 
   return (
@@ -41,6 +43,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         initialCategory={category}
         initialRecommendedAccessories={accessories.filter((item) => item.id !== product.id)}
         initialRelatedProducts={related.filter((item) => item.id !== product.id).slice(0, 4)}
+        initialVariantProducts={variants}
       />
     </>
   )

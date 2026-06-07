@@ -14,11 +14,24 @@ interface ProductGalleryProps {
 export function ProductGallery({ images, productName }: ProductGalleryProps) {
   const resolved = (images?.length ? images : ['/placeholder.svg']).map((src) => resolveMediaUrl(src))
   const [selectedImage, setSelectedImage] = useState(0)
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set())
   const hasMultipleImages = resolved.length > 1
+  const currentImage = resolved[selectedImage] ?? resolved[0] ?? '/placeholder.svg'
+  const currentImageSrc = failedImages.has(currentImage) ? '/placeholder.svg' : currentImage
 
   useEffect(() => {
     setSelectedImage(0)
+    setFailedImages(new Set())
   }, [images.join('|')])
+
+  const markImageFailed = (src: string) => {
+    setFailedImages((prev) => {
+      if (prev.has(src)) return prev
+      const next = new Set(prev)
+      next.add(src)
+      return next
+    })
+  }
 
   const showPrevious = () => {
     setSelectedImage((prev) => (prev - 1 + resolved.length) % resolved.length)
@@ -33,13 +46,14 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
       {/* Main image */}
       <div className="aspect-square bg-muted/30 rounded-xl overflow-hidden relative">
         <Image
-          src={resolved[selectedImage] ?? resolved[0]}
+          src={currentImageSrc}
           alt={productName}
           fill
           unoptimized
           className="object-contain p-8"
           sizes="(max-width: 768px) 100vw, 50vw"
           priority
+          onError={() => markImageFailed(currentImage)}
         />
 
         {hasMultipleImages && (
@@ -81,12 +95,13 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
               )}
             >
               <Image
-                src={image}
+                src={failedImages.has(image) ? '/placeholder.svg' : image}
                 alt={`${productName} - изображение ${index + 1}`}
                 width={80}
                 height={80}
                 unoptimized
                 className="object-contain p-2"
+                onError={() => markImageFailed(image)}
               />
             </button>
           ))}

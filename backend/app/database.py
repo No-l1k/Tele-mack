@@ -42,6 +42,9 @@ def ensure_product_columns() -> None:
             "warranty_type": "ALTER TABLE products ADD COLUMN warranty_type VARCHAR(100)",
             "service_info": "ALTER TABLE products ADD COLUMN service_info TEXT",
             "recommended_accessory_ids": "ALTER TABLE products ADD COLUMN recommended_accessory_ids JSON",
+            "variant_group": "ALTER TABLE products ADD COLUMN variant_group VARCHAR(255)",
+            "variant_name": "ALTER TABLE products ADD COLUMN variant_name VARCHAR(100)",
+            "variant_value": "ALTER TABLE products ADD COLUMN variant_value VARCHAR(100)",
             "meta_title": "ALTER TABLE products ADD COLUMN meta_title VARCHAR(255)",
             "meta_description": "ALTER TABLE products ADD COLUMN meta_description VARCHAR(500)",
         }

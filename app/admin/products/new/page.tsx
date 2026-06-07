@@ -80,6 +80,7 @@ export default function NewProductPage() {
   const [metaTitle, setMetaTitle] = useState('')
   const [metaDescription, setMetaDescription] = useState('')
   const [seoFormTick, setSeoFormTick] = useState(0)
+  const [variantGroup, setVariantGroup] = useState('')
   const descriptionEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
   const serviceInfoEditorRef = useRef<DescriptionBlocksEditorHandle>(null)
 
@@ -144,6 +145,9 @@ export default function NewProductPage() {
         warrantyType: String(payload.get('warrantyType') || '').trim() || undefined,
         serviceInfo: String(payload.get('serviceInfo') || '').trim() || undefined,
         recommendedAccessoryIds: recommendedAccessoryIds.map((id) => Number(id)),
+        variantGroup: String(payload.get('variantGroup') || '').trim() || undefined,
+        variantName: String(payload.get('variantName') || '').trim() || undefined,
+        variantValue: String(payload.get('variantValue') || '').trim() || undefined,
         metaTitle: normalizeMetaTitleForSave(seoInputForSave, metaTitle),
         metaDescription: normalizeMetaDescriptionForSave(seoInputForSave, metaDescription),
         images: [],
@@ -195,6 +199,12 @@ export default function NewProductPage() {
     .filter((item) => !recommendedAccessoryIds.includes(String(item.id)))
     .filter((item) => item.name.toLowerCase().includes(accessoriesSearch.toLowerCase()))
     .slice(0, 20)
+  const existingVariantGroups = Array.from(
+    new Set(catalogProducts.map((item) => item.variantGroup?.trim()).filter(Boolean) as string[])
+  )
+  const productsInVariantGroup = variantGroup.trim()
+    ? catalogProducts.filter((item) => item.variantGroup?.trim() === variantGroup.trim()).slice(0, 8)
+    : []
 
   const addAccessory = (id: string) => {
     const normalizedId = String(id)
@@ -294,6 +304,58 @@ export default function NewProductPage() {
           </Card>
 
           <ProductSpecsEditor category={selectedCategory} rows={specRows} onChange={setSpecRows} />
+
+          <Card className="border-sky-200/70 bg-sky-50/30 shadow-sm">
+            <CardHeader className="border-b bg-sky-100/40">
+              <CardTitle>Варианты товара</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Объедините одинаковые модели, чтобы на витрине появился переключатель диагоналей.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="variant-group-new">Код группы вариантов</Label>
+                <Input
+                  id="variant-group-new"
+                  name="variantGroup"
+                  list="variant-groups-new"
+                  placeholder="Например samsung-q80c"
+                  value={variantGroup}
+                  onChange={(event) => setVariantGroup(event.target.value)}
+                />
+                <datalist id="variant-groups-new">
+                  {existingVariantGroups.map((group) => (
+                    <option key={group} value={group} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-muted-foreground">
+                  Укажите одинаковый код у всех размеров одной модели. Если поле пустое, переключатель не показывается.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="variant-name-new">Название параметра</Label>
+                  <Input id="variant-name-new" name="variantName" placeholder="Диагональ" defaultValue="Диагональ" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="variant-value-new">Значение этого товара</Label>
+                  <Input id="variant-value-new" name="variantValue" placeholder='55"' />
+                </div>
+              </div>
+              {productsInVariantGroup.length > 0 && (
+                <div className="rounded-md border bg-background p-3">
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">Уже в этой группе:</p>
+                  <div className="space-y-1">
+                    {productsInVariantGroup.map((item) => (
+                      <p key={item.id} className="truncate text-sm">
+                        {item.variantValue || 'Без значения'} — {item.name}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <Card className="border-violet-200/70 bg-violet-50/30 shadow-sm">
             <CardHeader className="border-b bg-violet-100/40">

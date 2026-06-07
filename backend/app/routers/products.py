@@ -101,6 +101,11 @@ def _normalize_search_query(value: str | None) -> str:
     return " ".join((value or "").strip().casefold().split())
 
 
+def _clean_optional_text(value: str | None) -> str | None:
+    normalized = " ".join((value or "").strip().split())
+    return normalized or None
+
+
 def _search_tokens(value: str | None, min_len: int = 2) -> list[str]:
     normalized = _normalize_search_query(value)
     if not normalized:
@@ -593,6 +598,25 @@ def get_related_products(product_id: int, limit: int = Query(default=4, ge=1, le
     return ApiResponse(data=[product_to_dict(item) for item in related])
 
 
+@router.get("/{product_id}/variants", response_model=ApiResponse)
+def get_product_variants(product_id: int, db: Session = Depends(get_db)):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    variant_group = _clean_optional_text(product.variant_group)
+    if not variant_group:
+        return ApiResponse(data=[])
+
+    rows = (
+        db.query(Product)
+        .options(joinedload(Product.category))
+        .filter(Product.variant_group == variant_group)
+        .order_by(asc(Product.variant_value), asc(Product.name))
+        .all()
+    )
+    return ApiResponse(data=[product_to_dict(item) for item in rows])
+
+
 @router.get("/{product_id}/reviews")
 def get_product_reviews(
     product_id: int,
@@ -705,6 +729,9 @@ def create_product(payload: ProductBase, db: Session = Depends(get_db)):
         warranty_type=(payload.warrantyType or "").strip() or None,
         service_info=(payload.serviceInfo or "").strip() or None,
         recommended_accessory_ids=_normalize_recommended_accessory_ids(db, payload.recommendedAccessoryIds) or None,
+        variant_group=_clean_optional_text(payload.variantGroup),
+        variant_name=_clean_optional_text(payload.variantName) or "Диагональ",
+        variant_value=_clean_optional_text(payload.variantValue),
         meta_title=(payload.metaTitle or "").strip() or None,
         meta_description=(payload.metaDescription or "").strip() or None,
     )
@@ -889,6 +916,12 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
             )
             or None
         )
+    if payload.variantGroup is not None:
+        product.variant_group = _clean_optional_text(payload.variantGroup)
+    if payload.variantName is not None:
+        product.variant_name = _clean_optional_text(payload.variantName) or "Диагональ"
+    if payload.variantValue is not None:
+        product.variant_value = _clean_optional_text(payload.variantValue)
     if payload.metaTitle is not None:
         product.meta_title = (payload.metaTitle or "").strip() or None
     if payload.metaDescription is not None:

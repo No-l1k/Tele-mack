@@ -23,6 +23,9 @@ export interface Product {
   warrantyType?: string
   serviceInfo?: string
   recommendedAccessoryIds?: string[]
+  variantGroup?: string
+  variantName?: string
+  variantValue?: string
   metaTitle?: string
   metaDescription?: string
   isNew: boolean

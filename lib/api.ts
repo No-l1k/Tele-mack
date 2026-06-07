@@ -47,6 +47,9 @@ interface ProductWritePayload {
   warrantyType?: string
   serviceInfo?: string
   recommendedAccessoryIds?: number[]
+  variantGroup?: string
+  variantName?: string
+  variantValue?: string
   metaTitle?: string
   metaDescription?: string
   images: string[]
@@ -273,6 +276,13 @@ export const productsApi = {
    */
   getRelated: (id: string, limit = 4): Promise<ApiResponse<Product[]>> => {
     return fetchApi(`/products/${id}/related?limit=${limit}`)
+  },
+
+  /**
+   * GET /products/:id/variants - Товары из той же группы вариантов
+   */
+  getVariants: (id: string): Promise<ApiResponse<Product[]>> => {
+    return fetchApi(`/products/${id}/variants`)
   },
 
   /**

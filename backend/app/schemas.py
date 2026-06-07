@@ -77,6 +77,9 @@ class ProductBase(BaseModel):
     warrantyType: str | None = None
     serviceInfo: str | None = None
     recommendedAccessoryIds: list[int] = Field(default_factory=list)
+    variantGroup: str | None = None
+    variantName: str | None = None
+    variantValue: str | None = None
     metaTitle: str | None = None
     metaDescription: str | None = None
 
@@ -114,6 +117,9 @@ class ProductUpdateIn(BaseModel):
     warrantyType: str | None = None
     serviceInfo: str | None = None
     recommendedAccessoryIds: list[int] | None = None
+    variantGroup: str | None = None
+    variantName: str | None = None
+    variantValue: str | None = None
     metaTitle: str | None = None
     metaDescription: str | None = None
 

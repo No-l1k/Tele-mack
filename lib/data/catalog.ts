@@ -171,6 +171,11 @@ export async function getProductsByIds(ids: string[]): Promise<Product[]> {
   return products.filter((product): product is Product => Boolean(product))
 }
 
+export async function getProductVariants(productId: string): Promise<Product[]> {
+  const response = await apiGet<ApiEnvelope<Product[]>>(`/products/${productId}/variants`)
+  return response.data.map(normalizeProduct)
+}
+
 export async function getNewProducts(limit = 8): Promise<Product[]> {
   const response = await apiGet<ApiEnvelope<Product[]>>(`/products/new?limit=${limit}`)
   return response.data.map(normalizeProduct)
