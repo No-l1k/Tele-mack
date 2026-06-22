@@ -62,6 +62,7 @@ class ProductBase(BaseModel):
     price: int
     oldPrice: int | None = None
     categoryId: int
+    categoryIds: list[int] = Field(default_factory=list)
     categorySlug: str | None = None
     brand: str = ""
     sku: str | None = None
@@ -102,6 +103,9 @@ class ProductUpdateIn(BaseModel):
     price: int | None = None
     oldPrice: int | None = None
     categoryId: int | None = None
+    categoryIds: list[int] | None = None
+    addCategoryIds: list[int] | None = None
+    removeCategoryIds: list[int] | None = None
     categorySlug: str | None = None
     brand: str | None = None
     sku: str | None = None

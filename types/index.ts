@@ -9,6 +9,8 @@ export interface Product {
   oldPrice?: number
   images: string[]
   categoryId: string
+  categoryIds?: string[]
+  categories?: ProductCategoryRef[]
   categorySlug: string
   brand: string
   sku?: string
@@ -31,6 +33,13 @@ export interface Product {
   isNew: boolean
   isHit?: boolean
   createdAt: string
+}
+
+export interface ProductCategoryRef {
+  id: string
+  name: string
+  slug: string
+  isPrimary?: boolean
 }
 
 export interface Category {

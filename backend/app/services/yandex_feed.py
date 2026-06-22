@@ -9,7 +9,7 @@ from html import escape
 from sqlalchemy.orm import Session, joinedload
 
 from ..config import settings
-from ..models import Category, Product
+from ..models import Category, Product, ProductCategory
 from ..pricing_constants import COURIER_DELIVERY_COST_RUB
 from ..services.products import _normalize_product_images
 
@@ -127,6 +127,9 @@ def build_yandex_feed_xml(db: Session) -> bytes:
     products = _eligible_products(db)
     all_categories = db.query(Category).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     used_category_ids = {product.category_id for product in products if product.category_id}
+    used_category_ids.update(
+        row[0] for row in db.query(ProductCategory.category_id).distinct().all() if row[0]
+    )
     feed_categories = _collect_categories_for_products(all_categories, used_category_ids)
 
     lines = [

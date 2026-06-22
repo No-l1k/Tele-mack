@@ -29,6 +29,11 @@ function normalizeProduct(product: Product): Product {
     ...product,
     id: String(product.id),
     categoryId: String(product.categoryId),
+    categoryIds: (product.categoryIds ?? [product.categoryId]).map((id) => String(id)),
+    categories: (product.categories ?? []).map((category) => ({
+      ...category,
+      id: String(category.id),
+    })),
     recommendedAccessoryIds: (product.recommendedAccessoryIds ?? []).map((id) => String(id)),
     images: product.images?.length ? product.images : ['/placeholder.svg'],
   }

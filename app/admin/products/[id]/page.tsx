@@ -23,6 +23,7 @@ import {
   type DescriptionBlocksEditorHandle,
 } from '@/components/admin/description-blocks-editor'
 import { ProductSpecsEditor, type SpecRow } from '@/components/admin/product-specs-editor'
+import { ProductCategoriesEditor } from '@/components/admin/product-categories-editor'
 import { resolveMediaUrl } from '@/lib/media'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
 import { normalizeProductSlug, normalizeProductSlugInput } from '@/lib/admin-slug'
@@ -78,6 +79,7 @@ export default function EditProductPage() {
   const [serviceInfoHtml, setServiceInfoHtml] = useState('')
   const [slug, setSlug] = useState('')
   const [categoryId, setCategoryId] = useState('')
+  const [additionalCategoryIds, setAdditionalCategoryIds] = useState<string[]>([])
   const [additionalOpen, setAdditionalOpen] = useState(false)
   const [seoOpen, setSeoOpen] = useState(false)
   const [metaTitle, setMetaTitle] = useState('')
@@ -102,6 +104,11 @@ export default function EditProductPage() {
         setServiceInfoHtml(loadedProduct.serviceInfo || '')
         setSlug(loadedProduct.slug || '')
         setCategoryId(String(loadedProduct.categoryId || ''))
+        setAdditionalCategoryIds(
+          (loadedProduct.categoryIds ?? [])
+            .map((id) => String(id))
+            .filter((id) => id !== String(loadedProduct.categoryId)),
+        )
         setVariantGroup(loadedProduct.variantGroup || '')
         setRecommendedAccessoryIds((loadedProduct.recommendedAccessoryIds ?? []).map((id) => String(id)))
         const rows = Object.entries(loadedProduct.specs || {})
@@ -210,6 +217,9 @@ export default function EditProductPage() {
         price: Number(payload.get('price') || product.price),
         oldPrice: payload.get('oldPrice') ? Number(payload.get('oldPrice')) : undefined,
         categoryId: selectedCategoryId,
+        categoryIds: Array.from(
+          new Set([selectedCategoryId, ...additionalCategoryIds.map((id) => Number(id))].filter((id) => id > 0)),
+        ),
         categorySlug: selectedCategory?.slug || product.categorySlug,
         sku: String(payload.get('sku') || product.sku || '').trim() || undefined,
         gtin: String(payload.get('gtin') || product.gtin || '').trim() || undefined,
@@ -361,19 +371,17 @@ export default function EditProductPage() {
                 onDeleteImageFile={handleDeleteDescriptionImage}
               />
               <input type="hidden" name="serviceInfo" value={serviceInfoHtml} />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input name="brand" defaultValue={product.brand} />
-                <select
-                  name="categoryId"
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  value={categoryId || String(product.categoryId)}
-                  onChange={(event) => setCategoryId(event.target.value)}
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>{category.name}</option>
-                  ))}
-                </select>
-              </div>
+              <Input name="brand" defaultValue={product.brand} />
+              <ProductCategoriesEditor
+                categories={categories}
+                primaryCategoryId={categoryId || String(product.categoryId)}
+                additionalCategoryIds={additionalCategoryIds}
+                onPrimaryChange={(nextCategoryId) => {
+                  setCategoryId(nextCategoryId)
+                  setAdditionalCategoryIds((prev) => prev.filter((id) => id !== nextCategoryId))
+                }}
+                onAdditionalChange={setAdditionalCategoryIds}
+              />
             </CardContent>
           </Card>
           <ProductSpecsEditor category={selectedCategory} rows={specRows} onChange={setSpecRows} />

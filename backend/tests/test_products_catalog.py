@@ -480,3 +480,47 @@ def test_list_products_filter_by_spec_template():
     assert "Разрешение экрана" in facets_filtered
     assert "4K Ultra HD" in facets_filtered["Разрешение экрана"]
     assert "Full HD" in facets_filtered["Разрешение экрана"]
+
+
+def test_product_can_belong_to_multiple_categories():
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    primary_slug = f"primary-cat-{suffix}"
+    secondary_slug = f"secondary-cat-{suffix}"
+    primary_id = _create_category(headers, name=f"Primary {suffix}", slug=primary_slug)
+    secondary_id = _create_category(headers, name=f"Secondary {suffix}", slug=secondary_slug)
+    product = _create_product(
+        headers,
+        category_id=primary_id,
+        category_slug=primary_slug,
+        name=f"Multi category product {suffix}",
+        slug=f"multi-category-product-{suffix}",
+    )
+
+    add_response = client.post(
+        f"/api/categories/{secondary_id}/products/{product['id']}",
+        headers=headers,
+    )
+    assert add_response.status_code == 200, add_response.text
+    payload = add_response.json()["data"]
+    assert primary_id in payload["categoryIds"]
+    assert secondary_id in payload["categoryIds"]
+    assert payload["categoryId"] == primary_id
+
+    listed = client.get("/api/products", params={"category": secondary_slug, "page_size": 100})
+    assert listed.status_code == 200
+    listed_ids = {item["id"] for item in listed.json()["data"]}
+    assert product["id"] in listed_ids
+
+    remove_response = client.delete(
+        f"/api/categories/{secondary_id}/products/{product['id']}",
+        headers=headers,
+    )
+    assert remove_response.status_code == 200, remove_response.text
+    assert secondary_id not in remove_response.json()["data"]["categoryIds"]
+
+    blocked_remove = client.delete(
+        f"/api/categories/{primary_id}/products/{product['id']}",
+        headers=headers,
+    )
+    assert blocked_remove.status_code == 400

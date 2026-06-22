@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,8 +10,16 @@ from ..database import get_db
 from ..deps import get_current_admin
 from ..config import settings
 from ..rate_limit import rate_limit
-from ..models import Category, Product
+from ..models import Category, Product, ProductCategory
 from ..schemas import ApiResponse, CategoryBase, CategoryUpdateIn
+
+from ..services.product_categories import (
+    add_product_to_category,
+    category_direct_product_counts,
+    product_load_options,
+    remove_product_from_category,
+)
+from ..services.products import product_to_dict
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -41,10 +49,7 @@ def _is_descendant(db: Session, possible_child_id: int, possible_parent_id: int)
 
 def _build_category_payloads(db: Session) -> tuple[list[Category], dict[int, int], dict[int | None, list[Category]]]:
     categories = db.query(Category).order_by(Category.sort_order.asc()).all()
-    direct_counts = {
-        int(category_id): int(count)
-        for category_id, count in db.query(Product.category_id, func.count(Product.id)).group_by(Product.category_id).all()
-    }
+    direct_counts = category_direct_product_counts(db)
     by_parent: dict[int | None, list[Category]] = {}
     for category in categories:
         by_parent.setdefault(category.parent_id, []).append(category)
@@ -210,16 +215,59 @@ def update_category(category_id: int, payload: CategoryUpdateIn, db: Session = D
     return ApiResponse(data=category_to_dict(category, include_children=False, by_parent=by_parent, product_counts=product_counts))
 
 
+@router.post(
+    "/{category_id}/products/{product_id}",
+    response_model=ApiResponse,
+    dependencies=[Depends(get_current_admin)],
+)
+def add_product_to_category_membership(category_id: int, product_id: int, db: Session = Depends(get_db)):
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    add_product_to_category(db, product, category_id)
+    db.commit()
+    product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
+    return ApiResponse(data=product_to_dict(product))
+
+
+@router.delete(
+    "/{category_id}/products/{product_id}",
+    response_model=ApiResponse,
+    dependencies=[Depends(get_current_admin)],
+)
+def remove_product_from_category_membership(category_id: int, product_id: int, db: Session = Depends(get_db)):
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    remove_product_from_category(db, product, category_id)
+    db.commit()
+    product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
+    return ApiResponse(data=product_to_dict(product))
+
+
 @router.delete("/{category_id}", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])
 def delete_category(category_id: int, db: Session = Depends(get_db)):
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
-    products_count = db.query(Product).filter(Product.category_id == category_id).count()
-    if products_count > 0:
+    products_count = db.query(func.count(func.distinct(Product.id))).filter(
+        or_(
+            Product.category_id == category_id,
+            Product.id.in_(
+                db.query(ProductCategory.product_id).filter(ProductCategory.category_id == category_id)
+            ),
+        )
+    ).scalar()
+    if products_count and products_count > 0:
         raise HTTPException(
             status_code=409,
-            detail="Нельзя удалить категорию, в которой есть товары. Перенесите или удалите товары.",
+            detail="Нельзя удалить категорию, в которой есть товары. Уберите товары из категории или удалите их.",
         )
     children_count = db.query(Category).filter(Category.parent_id == category_id).count()
     if children_count > 0:

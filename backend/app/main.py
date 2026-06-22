@@ -16,6 +16,8 @@ from .database import (
     ensure_order_columns,
     ensure_order_item_columns,
     ensure_product_columns,
+    ensure_product_categories_table,
+    backfill_product_category_memberships,
     ensure_product_stock_flags_synced,
 )
 from .routers import admin, auth, cart, categories, feeds, orders, products, public, reviews, users
@@ -26,9 +28,12 @@ settings.validate_runtime_security()
 if settings.db_auto_create:
     Base.metadata.create_all(bind=engine)
     ensure_product_columns()
+    ensure_product_categories_table()
     ensure_category_columns()
     ensure_order_columns()
     ensure_order_item_columns()
+
+backfill_product_category_memberships()
 
 ensure_order_id_sequence(engine, is_sqlite=is_sqlite)
 ensure_product_stock_flags_synced()

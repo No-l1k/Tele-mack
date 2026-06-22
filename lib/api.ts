@@ -32,6 +32,9 @@ interface ProductWritePayload {
   price: number
   oldPrice?: number
   categoryId: number
+  categoryIds?: number[]
+  addCategoryIds?: number[]
+  removeCategoryIds?: number[]
   categorySlug: string
   brand: string
   sku?: string
@@ -69,7 +72,10 @@ function formatApiErrorBody(body: unknown): string {
   if (!body || typeof body !== 'object') return 'Ошибка сервера'
   const record = body as Record<string, unknown>
   if (typeof record.message === 'string') return record.message
-  if (typeof record.detail === 'string') return record.detail
+  if (typeof record.detail === 'string') {
+    if (record.detail === 'Invalid credentials') return 'Неверный логин или пароль'
+    return record.detail
+  }
   if (Array.isArray(record.detail)) {
     return record.detail
       .map((item) => {
@@ -113,14 +119,22 @@ async function fetchApi<T>(
     }
   }
 
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
+
   let response: Response
   try {
-    response = await fetch(url, config)
+    response = await fetch(url, { ...config, signal: controller.signal })
   } catch (error) {
     if (typeof window !== 'undefined') {
       console.error('[API] сеть недоступна:', url, error)
     }
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Сервер не отвечает. Перезапустите dev:all и убедитесь, что порт 8000 свободен.')
+    }
     throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
 
   if (!response.ok) {
@@ -352,6 +366,18 @@ export const categoriesApi = {
    */
   delete: (id: string): Promise<ApiResponse<void>> => {
     return fetchApi(`/categories/${id}`, {
+      method: 'DELETE',
+    })
+  },
+
+  addProduct: (categoryId: string, productId: string): Promise<ApiResponse<Product>> => {
+    return fetchApi(`/categories/${categoryId}/products/${productId}`, {
+      method: 'POST',
+    })
+  },
+
+  removeProduct: (categoryId: string, productId: string): Promise<ApiResponse<Product>> => {
+    return fetchApi(`/categories/${categoryId}/products/${productId}`, {
       method: 'DELETE',
     })
   },

@@ -35,8 +35,19 @@ class Category(Base):
     show_on_home: Mapped[bool] = mapped_column(Boolean, default=False)
 
     products: Mapped[list["Product"]] = relationship(back_populates="category")
+    product_memberships: Mapped[list["ProductCategory"]] = relationship(back_populates="category", cascade="all, delete-orphan")
     parent: Mapped["Category | None"] = relationship(remote_side=[id], back_populates="children")
     children: Mapped[list["Category"]] = relationship(back_populates="parent")
+
+
+class ProductCategory(Base):
+    __tablename__ = "product_categories"
+
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True, index=True)
+
+    product: Mapped["Product"] = relationship(back_populates="category_memberships")
+    category: Mapped["Category"] = relationship(back_populates="product_memberships")
 
 
 class Product(Base):
@@ -73,6 +84,10 @@ class Product(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     category: Mapped["Category"] = relationship(back_populates="products")
+    category_memberships: Mapped[list["ProductCategory"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+    )
     order_items: Mapped[list["OrderItem"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     reviews: Mapped[list["Review"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     favored_by: Mapped[list["Favorite"]] = relationship(back_populates="product", cascade="all, delete-orphan")

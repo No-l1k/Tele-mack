@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import Category, Product
+from app.services.product_categories import sync_product_category_memberships
 
 
 def seed(db: Session) -> None:
@@ -63,6 +64,14 @@ def seed(db: Session) -> None:
         ),
     ]
     db.add_all(products)
+    db.flush()
+    for product in products:
+        sync_product_category_memberships(
+            db,
+            product,
+            category_ids=[product.category_id],
+            primary_category_id=product.category_id,
+        )
     db.commit()
     print("Seed completed: 2 categories and 2 products inserted.")
 

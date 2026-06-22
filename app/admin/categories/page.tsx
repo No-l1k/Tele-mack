@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
+import { toast } from 'sonner'
 import { ProductImage } from '@/components/ui/product-image'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,9 +26,25 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { categoriesApi } from '@/lib/api'
-import type { Category } from '@/types'
+import { categoriesApi, productsApi } from '@/lib/api'
+import { resolveMediaUrl } from '@/lib/media'
+import type { Category, Product } from '@/types'
 import { Plus, Pencil, Trash2, Image as ImageIcon } from 'lucide-react'
+
+async function loadCategoryProducts(categorySlug: string): Promise<Product[]> {
+  const allProducts: Product[] = []
+  let page = 1
+  let totalPages = 1
+
+  while (page <= totalPages) {
+    const response = await productsApi.getAll({ categorySlug }, page, 100)
+    allProducts.push(...response.data)
+    totalPages = response.totalPages || 1
+    page += 1
+  }
+
+  return allProducts
+}
 
 const slugify = (value: string) =>
   value
@@ -53,6 +71,12 @@ export default function AdminCategoriesPage() {
   const [newImageFile, setNewImageFile] = useState<File | null>(null)
   const [editImageFile, setEditImageFile] = useState<File | null>(null)
   const [removeEditImage, setRemoveEditImage] = useState(false)
+  const [categoryProducts, setCategoryProducts] = useState<Product[]>([])
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [productSearch, setProductSearch] = useState('')
+  const [searchResults, setSearchResults] = useState<Product[]>([])
+  const [addingProductId, setAddingProductId] = useState<string | null>(null)
+  const [removingProductId, setRemovingProductId] = useState<string | null>(null)
 
   const categoriesWithCount = useMemo(() => categories, [categories])
 
@@ -68,6 +92,31 @@ export default function AdminCategoriesPage() {
   useEffect(() => {
     loadCategories()
   }, [])
+
+  useEffect(() => {
+    if (!isEditDialogOpen || productSearch.trim().length < 1) {
+      setSearchResults([])
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await productsApi.search(productSearch.trim())
+        const inCategory = new Set(categoryProducts.map((item) => String(item.id)))
+        setSearchResults(
+          response.data
+            .filter((item) => !inCategory.has(String(item.id)))
+            .slice(0, 20)
+            .map((item) => ({ ...item, id: String(item.id) }))
+        )
+      } catch (error) {
+        console.error('Failed to search products', error)
+        setSearchResults([])
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [productSearch, isEditDialogOpen, categoryProducts])
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -96,7 +145,7 @@ export default function AdminCategoriesPage() {
     }
   }
 
-  const openEditDialog = (category: Category) => {
+  const openEditDialog = async (category: Category) => {
     setEditingCategory(category)
     setEditName(category.name)
     setEditSlug(category.slug)
@@ -104,7 +153,70 @@ export default function AdminCategoriesPage() {
     setEditShowOnHome(Boolean(category.showOnHome))
     setRemoveEditImage(false)
     setEditImageFile(null)
+    setProductSearch('')
+    setSearchResults([])
+    setCategoryProducts([])
     setIsEditDialogOpen(true)
+
+    setProductsLoading(true)
+    try {
+      const products = await loadCategoryProducts(category.slug)
+      setCategoryProducts(products.map((item) => ({ ...item, id: String(item.id) })))
+    } catch (error) {
+      console.error('Failed to load category products', error)
+      setCategoryProducts([])
+    } finally {
+      setProductsLoading(false)
+    }
+  }
+
+  const handleAddProductToCategory = async (productId: string) => {
+    if (!editingCategory) return
+
+    setAddingProductId(productId)
+    try {
+      const response = await categoriesApi.addProduct(editingCategory.id, productId)
+      const updated = { ...response.data, id: String(response.data.id) }
+      setCategoryProducts((prev) => {
+        if (prev.some((item) => item.id === updated.id)) return prev
+        return [...prev, updated]
+      })
+      setSearchResults((prev) => prev.filter((item) => item.id !== productId))
+      await loadCategories()
+      toast.success('Товар добавлен в категорию')
+    } catch (error) {
+      console.error('Failed to add product to category', error)
+      toast.error('Не удалось добавить товар в категорию')
+    } finally {
+      setAddingProductId(null)
+    }
+  }
+
+  const handleRemoveProductFromCategory = async (productId: string) => {
+    if (!editingCategory) return
+
+    setRemovingProductId(productId)
+    try {
+      await categoriesApi.removeProduct(editingCategory.id, productId)
+      setCategoryProducts((prev) => prev.filter((item) => item.id !== productId))
+      await loadCategories()
+      toast.success('Товар убран из категории')
+    } catch (error: unknown) {
+      console.error('Failed to remove product from category', error)
+      const message = error instanceof Error ? error.message : 'Не удалось убрать товар из категории'
+      toast.error(message)
+    } finally {
+      setRemovingProductId(null)
+    }
+  }
+
+  const formatProductCategories = (item: Product) => {
+    const labels = (item.categories ?? [])
+      .map((category) => (category.isPrimary ? `${category.name} (основная)` : category.name))
+      .filter(Boolean)
+    if (labels.length > 0) return labels.join(', ')
+    const primaryName = categories.find((cat) => cat.id === String(item.categoryId))?.name
+    return primaryName ? `Основная: ${primaryName}` : `ID: ${item.id}`
   }
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -225,7 +337,7 @@ export default function AdminCategoriesPage() {
           </DialogContent>
         </Dialog>
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>Редактировать категорию</DialogTitle>
               <DialogDescription>
@@ -297,6 +409,98 @@ export default function AdminCategoriesPage() {
                 <Label htmlFor="edit-show-on-home" className="cursor-pointer">
                   Показывать на главной странице
                 </Label>
+              </div>
+              <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                <div className="space-y-1">
+                  <Label htmlFor="category-product-search">Товары в категории</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Найдите существующий товар в каталоге и добавьте его в эту категорию без смены основной категории.
+                  </p>
+                </div>
+                <Input
+                  id="category-product-search"
+                  value={productSearch}
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder="Поиск товара по названию"
+                />
+                <div className="max-h-40 space-y-2 overflow-y-auto">
+                  {productsLoading ? (
+                    <p className="text-sm text-muted-foreground">Загрузка товаров...</p>
+                  ) : categoryProducts.length > 0 ? (
+                    categoryProducts.map((item) => {
+                      const isPrimary = String(item.categoryId) === editingCategory?.id
+                      return (
+                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border bg-background p-2">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded border bg-muted/30">
+                            <Image
+                              src={resolveMediaUrl(item.images?.[0] || '/placeholder.svg')}
+                              alt={item.name}
+                              fill
+                              unoptimized
+                              className="object-contain p-1"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium">{item.name}</p>
+                              {isPrimary && <Badge variant="secondary">Основная</Badge>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{formatProductCategories(item)}</p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={isPrimary || removingProductId === item.id}
+                          onClick={() => handleRemoveProductFromCategory(item.id)}
+                        >
+                          {isPrimary ? 'Основная' : removingProductId === item.id ? 'Удаление...' : 'Убрать'}
+                        </Button>
+                      </div>
+                      )
+                    })
+                  ) : (
+                    <p className="text-sm text-muted-foreground">В этой категории пока нет товаров.</p>
+                  )}
+                </div>
+                {productSearch.trim().length > 0 && (
+                  <div className="space-y-2 border-t pt-3">
+                    {searchResults.length > 0 ? (
+                      searchResults.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border bg-background p-2">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded border bg-muted/30">
+                              <Image
+                                src={resolveMediaUrl(item.images?.[0] || '/placeholder.svg')}
+                                alt={item.name}
+                                fill
+                                unoptimized
+                                className="object-contain p-1"
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{item.name}</p>
+                              <p className="text-xs text-muted-foreground">{formatProductCategories(item)}</p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={addingProductId === item.id}
+                            onClick={() => handleAddProductToCategory(item.id)}
+                          >
+                            {addingProductId === item.id ? 'Добавление...' : 'Добавить'}
+                          </Button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">По вашему запросу товары не найдены.</p>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex gap-3">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setIsEditDialogOpen(false)}>

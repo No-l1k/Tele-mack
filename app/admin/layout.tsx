@@ -44,23 +44,38 @@ export default function AdminLayout({
   const { user, logout, isAdmin, isLoading } = useAuth()
   const isLoginPage = pathname.startsWith('/admin/login')
   const isOrderReceiptPrint = /^\/admin\/orders\/[^/]+\/print\/?$/.test(pathname)
+  const [hasStoredAdmin, setHasStoredAdmin] = useState(false)
 
   useEffect(() => {
-    if (!isLoginPage && !isLoading && !isAdmin) {
+    try {
+      const raw = localStorage.getItem('auth_user')
+      const stored = raw ? JSON.parse(raw) : null
+      setHasStoredAdmin(stored?.role === 'admin' && Boolean(localStorage.getItem('auth_token')))
+    } catch {
+      setHasStoredAdmin(false)
+    }
+  }, [isAdmin, user])
+
+  useEffect(() => {
+    if (!isLoginPage && !isLoading && !isAdmin && !hasStoredAdmin) {
       router.replace('/admin/login')
     }
-  }, [isAdmin, isLoading, isLoginPage, router])
+  }, [hasStoredAdmin, isAdmin, isLoading, isLoginPage, router])
 
   if (isLoginPage) {
     return <>{children}</>
   }
 
-  if (isLoading || !isAdmin) {
+  if (isLoading || (!isAdmin && hasStoredAdmin)) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center">
         <div className="text-sm text-muted-foreground">Проверяем доступ...</div>
       </div>
     )
+  }
+
+  if (!isAdmin) {
+    return null
   }
 
   if (isOrderReceiptPrint) {

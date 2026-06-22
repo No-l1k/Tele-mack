@@ -120,6 +120,12 @@ export function OrderReceipt({ order, store, settings }: OrderReceiptProps) {
           <span className={styles.metaLabel}>Адрес доставки:</span>
           <span>{formatAddress(order)}</span>
         </div>
+        {order.comment?.trim() ? (
+          <div className={styles.metaRow}>
+            <span className={styles.metaLabel}>Комментарий:</span>
+            <span>{order.comment.trim()}</span>
+          </div>
+        ) : null}
       </section>
 
       <div className={styles.logoWrap}>

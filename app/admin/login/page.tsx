@@ -34,9 +34,7 @@ export default function AdminLoginPage() {
 
     const result = await adminLogin(login, password)
 
-    if (result.success) {
-      router.push('/admin')
-    } else {
+    if (!result.success) {
       setError(result.message || 'Ошибка авторизации')
     }
 

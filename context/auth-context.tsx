@@ -116,10 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { success: true }
     } catch (error) {
-      return { 
-        success: false, 
-        message: 'Ошибка авторизации. Попробуйте позже.' 
-      }
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Ошибка авторизации. Проверьте, что бэкенд запущен на порту 8000.'
+      return { success: false, message }
     }
   }, [])
 

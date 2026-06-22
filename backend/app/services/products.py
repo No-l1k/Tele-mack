@@ -1,4 +1,8 @@
 from ..models import Product
+from ..services.product_categories import (
+    build_product_categories_payload,
+    collect_membership_category_ids,
+)
 
 PURCHASABLE_STOCK_STATUSES = frozenset({"in_stock", "low_stock"})
 
@@ -29,6 +33,8 @@ def product_to_dict(product: Product) -> dict:
     category = product.category
     specs = product.specs or {}
     clean_specs = {key: value for key, value in specs.items() if key != "images"}
+    category_ids = collect_membership_category_ids(product)
+    categories = build_product_categories_payload(product)
     return {
         "id": product.id,
         "name": product.name,
@@ -39,6 +45,8 @@ def product_to_dict(product: Product) -> dict:
         "oldPrice": product.old_price,
         "images": _normalize_product_images(specs),
         "categoryId": product.category_id,
+        "categoryIds": category_ids,
+        "categories": categories,
         "categorySlug": category.slug if category else "",
         "brand": product.brand,
         "sku": product.sku,

@@ -10,12 +10,20 @@ export const TV_EXTRA_WARRANTY_PRICE = 8000
 
 const TV_CATEGORY_KEYWORDS = ['телевиз', 'televizor', 'tv']
 
-export function isTvProduct(product: Pick<Product, 'specs' | 'categorySlug'>): boolean {
+export function isTvProduct(product: Pick<Product, 'specs' | 'categorySlug' | 'categories'>): boolean {
   if (TV_SCREEN_DIAGONAL_SPEC in (product.specs ?? {})) {
     return true
   }
-  const slug = (product.categorySlug ?? '').toLowerCase()
-  return TV_CATEGORY_KEYWORDS.some((keyword) => slug.includes(keyword))
+  const slugs = new Set<string>()
+  if (product.categorySlug) {
+    slugs.add(product.categorySlug.toLowerCase())
+  }
+  for (const category of product.categories ?? []) {
+    if (category.slug) {
+      slugs.add(category.slug.toLowerCase())
+    }
+  }
+  return Array.from(slugs).some((slug) => TV_CATEGORY_KEYWORDS.some((keyword) => slug.includes(keyword)))
 }
 
 export function parseScreenDiagonalInches(

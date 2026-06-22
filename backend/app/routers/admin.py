@@ -17,6 +17,7 @@ from ..models import Category, Order, OrderItem, Product, Setting, User
 from ..schemas import ApiResponse, StoreSettingsUpdateIn
 from ..rate_limit import rate_limit
 from ..services.checkout_services import DEFAULT_CHECKOUT_SERVICES, normalize_checkout_services
+from ..services.product_categories import sync_product_category_memberships
 from ..services.store_settings import normalize_delivery_info
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
@@ -406,22 +407,34 @@ def _run_import_yml_job(job_id: str, content: bytes):
                 product.in_stock = available
                 product.stock_status = "in_stock" if available else "out_of_stock"
                 product.specs = specs
+                sync_product_category_memberships(
+                    db,
+                    product,
+                    category_ids=[category_id],
+                    primary_category_id=category_id,
+                )
                 products_updated += 1
             else:
-                db.add(
-                    Product(
-                        name=name,
-                        slug=slug,
-                        description=description,
-                        short_description=short_description,
-                        price=price,
-                        old_price=old_price,
-                        category_id=category_id,
-                        brand=name.split(" ")[0] if name else "",
-                        in_stock=available,
-                        stock_status="in_stock" if available else "out_of_stock",
-                        specs=specs,
-                    )
+                product = Product(
+                    name=name,
+                    slug=slug,
+                    description=description,
+                    short_description=short_description,
+                    price=price,
+                    old_price=old_price,
+                    category_id=category_id,
+                    brand=name.split(" ")[0] if name else "",
+                    in_stock=available,
+                    stock_status="in_stock" if available else "out_of_stock",
+                    specs=specs,
+                )
+                db.add(product)
+                db.flush()
+                sync_product_category_memberships(
+                    db,
+                    product,
+                    category_ids=[category_id],
+                    primary_category_id=category_id,
                 )
                 products_created += 1
 

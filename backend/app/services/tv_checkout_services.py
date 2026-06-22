@@ -16,8 +16,15 @@ def is_tv_product(product: Product) -> bool:
     if TV_SCREEN_DIAGONAL_SPEC in specs:
         return True
     category = product.category
-    slug = (category.slug if category else "").lower()
-    return any(keyword in slug for keyword in TV_CATEGORY_KEYWORDS)
+    slugs: list[str] = []
+    if category and category.slug:
+        slugs.append(category.slug.lower())
+    for membership in product.category_memberships or []:
+        if membership.category and membership.category.slug:
+            slug = membership.category.slug.lower()
+            if slug not in slugs:
+                slugs.append(slug)
+    return any(any(keyword in slug for keyword in TV_CATEGORY_KEYWORDS) for slug in slugs)
 
 
 def parse_screen_diagonal_inches(specs: dict | None) -> int | None:

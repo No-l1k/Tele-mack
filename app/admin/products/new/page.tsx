@@ -23,6 +23,7 @@ import {
   type DescriptionBlocksEditorHandle,
 } from '@/components/admin/description-blocks-editor'
 import { ProductSpecsEditor, type SpecRow } from '@/components/admin/product-specs-editor'
+import { ProductCategoriesEditor } from '@/components/admin/product-categories-editor'
 import { injectUploadedImageUrls } from '@/lib/description-blocks'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
 import { normalizeProductSlug, normalizeProductSlugInput } from '@/lib/admin-slug'
@@ -69,6 +70,7 @@ export default function NewProductPage() {
   const [slug, setSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
   const [categoryId, setCategoryId] = useState('')
+  const [additionalCategoryIds, setAdditionalCategoryIds] = useState<string[]>([])
   const [images, setImages] = useState<File[]>([])
   const [descriptionHtml, setDescriptionHtml] = useState('')
   const [serviceInfoHtml, setServiceInfoHtml] = useState('')
@@ -130,6 +132,9 @@ export default function NewProductPage() {
         price: Number(payload.get('price') || 0),
         oldPrice: payload.get('oldPrice') ? Number(payload.get('oldPrice')) : undefined,
         categoryId: Number(categoryId),
+        categoryIds: Array.from(
+          new Set([Number(categoryId), ...additionalCategoryIds.map((id) => Number(id))].filter((id) => id > 0)),
+        ),
         categorySlug: selectedCategory?.slug || '',
         brand: normalizeBrand(String(payload.get('brand') || '')),
         sku: String(payload.get('sku') || '').trim() || undefined,
@@ -293,13 +298,17 @@ export default function NewProductPage() {
                 onChange={setDescriptionHtml}
               />
               <input type="hidden" name="serviceInfo" value={serviceInfoHtml} />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input name="brand" placeholder="Бренд" />
-                <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>
-                  <option value="">Категория</option>
-                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                </select>
-              </div>
+              <Input name="brand" placeholder="Бренд" />
+              <ProductCategoriesEditor
+                categories={categories}
+                primaryCategoryId={categoryId}
+                additionalCategoryIds={additionalCategoryIds}
+                onPrimaryChange={(nextCategoryId) => {
+                  setCategoryId(nextCategoryId)
+                  setAdditionalCategoryIds((prev) => prev.filter((id) => id !== nextCategoryId))
+                }}
+                onAdditionalChange={setAdditionalCategoryIds}
+              />
             </CardContent>
           </Card>
 

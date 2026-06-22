@@ -104,6 +104,65 @@ def ensure_order_columns() -> None:
                 connection.execute(text(ddl))
 
 
+def ensure_product_categories_table() -> None:
+    if not is_sqlite:
+        return
+
+    with engine.begin() as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
+        }
+        if "product_categories" not in tables:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE product_categories (
+                        product_id INTEGER NOT NULL,
+                        category_id INTEGER NOT NULL,
+                        PRIMARY KEY (product_id, category_id),
+                        FOREIGN KEY(product_id) REFERENCES products (id) ON DELETE CASCADE,
+                        FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE CASCADE
+                    )
+                    """
+                )
+            )
+            connection.execute(text("CREATE INDEX ix_product_categories_category_id ON product_categories (category_id)"))
+
+    backfill_product_category_memberships()
+
+
+def backfill_product_category_memberships() -> None:
+    """Добавляет в product_categories основные привязки из products.category_id."""
+    if is_sqlite:
+        with engine.begin() as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
+            }
+            if "product_categories" not in tables or "products" not in tables:
+                return
+
+    insert_sql = (
+        """
+        INSERT OR IGNORE INTO product_categories (product_id, category_id)
+        SELECT p.id, p.category_id
+        FROM products p
+        WHERE p.category_id IS NOT NULL
+        """
+        if is_sqlite
+        else """
+        INSERT INTO product_categories (product_id, category_id)
+        SELECT p.id, p.category_id
+        FROM products p
+        WHERE p.category_id IS NOT NULL
+        ON CONFLICT (product_id, category_id) DO NOTHING
+        """
+    )
+    with engine.begin() as connection:
+        connection.execute(text(insert_sql))
+
+
 def ensure_product_stock_flags_synced() -> None:
     """Синхронизирует in_stock со stock_status после смены логики остатков."""
     from .models import Product

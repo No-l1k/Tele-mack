@@ -14,7 +14,7 @@ from ..database import get_db, is_sqlite
 from ..product_spec_templates import build_spec_facets, get_spec_template_for_category
 from ..deps import get_current_admin, get_current_user
 from ..config import settings
-from ..models import CartItem, Category, Favorite, OrderItem, Product, Review, User
+from ..models import CartItem, Category, Favorite, OrderItem, Product, ProductCategory, Review, User
 from ..schemas import (
     ApiResponse,
     ProductBase,
@@ -24,6 +24,13 @@ from ..schemas import (
     ReviewCreateIn,
 )
 from ..services.csv_export import excel_csv_response
+from ..services.product_categories import (
+    add_product_to_category,
+    collect_membership_category_ids,
+    product_load_options,
+    remove_product_from_category,
+    sync_product_category_memberships,
+)
 from ..services.products import product_in_stock_from_status, product_to_dict
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -299,7 +306,15 @@ def _apply_product_filters(
             if include_subcategories
             else [category_row.id]
         )
-        query = query.filter(Product.category_id.in_(category_ids))
+        membership_subq = db.query(ProductCategory.product_id).filter(
+            ProductCategory.category_id.in_(category_ids)
+        )
+        query = query.filter(
+            or_(
+                Product.category_id.in_(category_ids),
+                Product.id.in_(membership_subq),
+            )
+        )
     if min_price is not None:
         query = query.filter(Product.price >= min_price)
     if max_price is not None:
@@ -352,7 +367,7 @@ def list_products(
     db: Session = Depends(get_db),
 ):
     parsed_spec_filters = _parse_spec_filters(spec_filters)
-    query = db.query(Product).options(joinedload(Product.category))
+    query = db.query(Product).options(*product_load_options())
     query = _apply_product_filters(
         query=query,
         db=db,
@@ -420,7 +435,7 @@ def search_products(
             "totalPages": 0,
         }
 
-    base = db.query(Product).options(joinedload(Product.category)).order_by(desc(Product.created_at))
+    base = db.query(Product).options(*product_load_options()).order_by(desc(Product.created_at))
     if is_sqlite:
         candidates = _filter_products_by_tokens(base.all(), tokens)
     else:
@@ -448,13 +463,13 @@ def search_products(
 
 @router.get("/new", response_model=ApiResponse)
 def get_new_products(limit: int = Query(default=10, ge=1, le=100), db: Session = Depends(get_db)):
-    rows = db.query(Product).options(joinedload(Product.category)).filter(Product.is_new.is_(True)).order_by(desc(Product.created_at)).limit(limit).all()
+    rows = db.query(Product).options(*product_load_options()).filter(Product.is_new.is_(True)).order_by(desc(Product.created_at)).limit(limit).all()
     return ApiResponse(data=[product_to_dict(item) for item in rows])
 
 
 @router.get("/popular", response_model=ApiResponse)
 def get_popular_products(limit: int = Query(default=10, ge=1, le=100), db: Session = Depends(get_db)):
-    rows = db.query(Product).options(joinedload(Product.category)).order_by(Product.reviews_count.desc(), Product.rating.desc()).limit(limit).all()
+    rows = db.query(Product).options(*product_load_options()).order_by(Product.reviews_count.desc(), Product.rating.desc()).limit(limit).all()
     return ApiResponse(data=[product_to_dict(item) for item in rows])
 
 
@@ -544,7 +559,7 @@ def get_product_filters_meta(
 
 @router.get("/slug/{slug}", response_model=ApiResponse)
 def get_product_by_slug(slug: str, db: Session = Depends(get_db)):
-    product = db.query(Product).options(joinedload(Product.category)).filter(Product.slug == slug).first()
+    product = db.query(Product).options(*product_load_options()).filter(Product.slug == slug).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     return ApiResponse(data=product_to_dict(product))
@@ -575,7 +590,7 @@ def export_products(db: Session = Depends(get_db)):
 
 @router.get("/{product_id}", response_model=ApiResponse)
 def get_product(product_id: int, db: Session = Depends(get_db)):
-    product = db.query(Product).options(joinedload(Product.category)).filter(Product.id == product_id).first()
+    product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     return ApiResponse(data=product_to_dict(product))
@@ -583,14 +598,16 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{product_id}/related", response_model=ApiResponse)
 def get_related_products(product_id: int, limit: int = Query(default=4, ge=1, le=24), db: Session = Depends(get_db)):
-    product = db.query(Product).options(joinedload(Product.category)).filter(Product.id == product_id).first()
+    product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
     related = (
         db.query(Product)
-        .options(joinedload(Product.category))
-        .filter(Product.category_id == product.category_id, Product.id != product_id)
+        .options(*product_load_options())
+        .join(ProductCategory, ProductCategory.product_id == Product.id)
+        .filter(ProductCategory.category_id.in_(collect_membership_category_ids(product)), Product.id != product_id)
+        .distinct()
         .order_by(desc(Product.created_at))
         .limit(limit)
         .all()
@@ -609,7 +626,7 @@ def get_product_variants(product_id: int, db: Session = Depends(get_db)):
 
     rows = (
         db.query(Product)
-        .options(joinedload(Product.category))
+        .options(*product_load_options())
         .filter(Product.variant_group == variant_group)
         .order_by(asc(Product.variant_value), asc(Product.name))
         .all()
@@ -737,11 +754,19 @@ def create_product(payload: ProductBase, db: Session = Depends(get_db)):
     )
     db.add(product)
     try:
+        db.flush()
+        category_ids = payload.categoryIds if payload.categoryIds else [payload.categoryId]
+        sync_product_category_memberships(
+            db,
+            product,
+            category_ids=category_ids,
+            primary_category_id=payload.categoryId,
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Product with this slug already exists") from None
-    db.refresh(product)
+    product = db.query(Product).options(*product_load_options()).filter(Product.id == product.id).first()
     return ApiResponse(data=product_to_dict(product))
 
 
@@ -867,11 +892,23 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
         product.price = payload.price
     if payload.oldPrice is not None:
         product.old_price = payload.oldPrice
-    if payload.categoryId is not None:
-        category = db.query(Category).filter(Category.id == payload.categoryId).first()
-        if not category:
-            raise HTTPException(status_code=400, detail="Category not found")
-        product.category_id = payload.categoryId
+    if payload.categoryIds is not None or payload.categoryId is not None:
+        primary_category_id = payload.categoryId if payload.categoryId is not None else product.category_id
+        category_ids = payload.categoryIds if payload.categoryIds is not None else collect_membership_category_ids(product)
+        sync_product_category_memberships(
+            db,
+            product,
+            category_ids=category_ids,
+            primary_category_id=primary_category_id,
+        )
+    if payload.addCategoryIds:
+        for category_id in payload.addCategoryIds:
+            add_product_to_category(db, product, category_id)
+        if product.category_id:
+            add_product_to_category(db, product, product.category_id)
+    if payload.removeCategoryIds:
+        for category_id in payload.removeCategoryIds:
+            remove_product_from_category(db, product, category_id)
     if payload.brand is not None:
         product.brand = _normalize_brand(payload.brand)
     if payload.sku is not None:
@@ -933,7 +970,7 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Product with this slug already exists") from None
-    db.refresh(product)
+    product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
     return ApiResponse(data=product_to_dict(product))
 
 
