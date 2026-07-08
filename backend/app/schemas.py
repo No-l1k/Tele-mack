@@ -195,6 +195,29 @@ class OrderStatusUpdate(BaseModel):
     status: str
 
 
+class ReceiptLineItemIn(BaseModel):
+    sku: str = ""
+    productName: str = Field(min_length=1, max_length=500)
+    unit: str = Field(default="шт.", min_length=1, max_length=20)
+    price: int = Field(ge=0)
+    quantity: int = Field(ge=1, le=999)
+    total: int = Field(ge=0)
+
+
+class ReceiptSnapshotIn(BaseModel):
+    supplier: str = Field(min_length=1, max_length=255)
+    buyer: str = Field(min_length=1, max_length=255)
+    phone: str = Field(min_length=1, max_length=32)
+    paymentMethodText: str = Field(min_length=1, max_length=255)
+    deliveryAddress: str = Field(min_length=1, max_length=500)
+    comment: str | None = Field(default=None, max_length=2000)
+    rows: list[ReceiptLineItemIn] = Field(min_length=1)
+    deliveryCost: int = Field(ge=0, default=0)
+    deliveryNote: str | None = Field(default=None, max_length=2000)
+    paymentSurcharge: int = Field(ge=0, default=0)
+    total: int = Field(ge=0)
+
+
 class OrderPublicLookupIn(BaseModel):
     orderNumber: int = Field(gt=0)
     phone: str = Field(min_length=5, max_length=32)

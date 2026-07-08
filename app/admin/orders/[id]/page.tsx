@@ -126,11 +126,17 @@ export default function AdminOrderDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" asChild>
             <Link href={`/admin/orders/${id}/edit`}>
               <Pencil className="h-4 w-4 mr-2" />
-              Редактировать
+              Редактировать заказ
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href={`/admin/orders/${id}/receipt-edit`}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Редактировать чек
             </Link>
           </Button>
           <Button variant="outline" asChild>

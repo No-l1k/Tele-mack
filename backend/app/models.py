@@ -115,6 +115,7 @@ class Order(Base):
     installation: Mapped[bool] = mapped_column(Boolean, default=False)
     selected_services: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     services_total: Mapped[int] = mapped_column(Integer, default=0)
+    receipt_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

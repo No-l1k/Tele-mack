@@ -10,7 +10,7 @@ from ..database import get_db
 from ..config import settings
 from ..deps import get_current_admin, get_current_user
 from ..models import Order, OrderItem, User
-from ..schemas import ApiResponse, OrderCreate, OrderPublicLookupIn, OrderStatusUpdate, OrderUpdate
+from ..schemas import ApiResponse, OrderCreate, OrderPublicLookupIn, OrderStatusUpdate, OrderUpdate, ReceiptSnapshotIn
 from ..services.csv_export import excel_csv_response
 from ..services.notifications import email_notifications_enabled, send_new_order_email
 from ..services.order_computation import compute_order
@@ -189,6 +189,40 @@ def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_
     order.services_total = computed.services_total
     order.updated_at = datetime.utcnow()
 
+    db.commit()
+    db.refresh(order)
+    return ApiResponse(data=order_to_dict(order))
+
+
+@router.put("/{order_id}/receipt", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])
+def update_order_receipt(order_id: int, payload: ReceiptSnapshotIn, db: Session = Depends(get_db)):
+    order = (
+        db.query(Order)
+        .options(selectinload(Order.items).joinedload(OrderItem.product))
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order.receipt_snapshot = payload.model_dump()
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return ApiResponse(data=order_to_dict(order))
+
+
+@router.delete("/{order_id}/receipt", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])
+def reset_order_receipt(order_id: int, db: Session = Depends(get_db)):
+    order = (
+        db.query(Order)
+        .options(selectinload(Order.items).joinedload(OrderItem.product))
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order.receipt_snapshot = None
+    order.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(order)
     return ApiResponse(data=order_to_dict(order))

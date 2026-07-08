@@ -87,6 +87,7 @@ def order_to_dict(order: Order) -> dict:
         "services": {"pixelCheck": order.pixel_check, "installation": order.installation},
         "selectedServices": selected_services,
         "servicesTotal": services_total,
+        "receiptSnapshot": order.receipt_snapshot if isinstance(order.receipt_snapshot, dict) else None,
         "createdAt": order.created_at,
         "updatedAt": order.updated_at,
     }

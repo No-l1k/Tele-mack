@@ -470,6 +470,25 @@ export const ordersApi = {
   },
 
   /**
+   * PUT /orders/:id/receipt - Сохранить снимок товарного чека (admin)
+   */
+  updateReceipt: (id: string, data: import('@/types').ReceiptSnapshot): Promise<ApiResponse<Order>> => {
+    return fetchApi(`/orders/${id}/receipt`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  /**
+   * DELETE /orders/:id/receipt - Сбросить снимок чека к данным заказа (admin)
+   */
+  resetReceipt: (id: string): Promise<ApiResponse<Order>> => {
+    return fetchApi(`/orders/${id}/receipt`, {
+      method: 'DELETE',
+    })
+  },
+
+  /**
    * PUT /orders/:id/status - Обновить статус заказа (admin)
    */
   updateStatus: (id: string, status: OrderStatus): Promise<ApiResponse<Order>> => {

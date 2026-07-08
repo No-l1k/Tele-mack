@@ -188,8 +188,7 @@ export async function getProductVariants(productId: string): Promise<Product[]> 
 }
 
 export async function getNewProducts(limit = 8): Promise<Product[]> {
-  const response = await apiGet<ApiEnvelope<Product[]>>(`/products/new?limit=${limit}`)
-  return response.data.map(normalizeProduct)
+  return getProductsByCategory('new', limit)
 }
 
 export async function getHitProducts(): Promise<Product[]> {

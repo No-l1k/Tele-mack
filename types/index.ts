@@ -84,6 +84,29 @@ export interface OrderItem {
   total: number
 }
 
+export interface ReceiptLineItem {
+  sku: string
+  productName: string
+  unit: string
+  price: number
+  quantity: number
+  total: number
+}
+
+export interface ReceiptSnapshot {
+  supplier: string
+  buyer: string
+  phone: string
+  paymentMethodText: string
+  deliveryAddress: string
+  comment?: string | null
+  rows: ReceiptLineItem[]
+  deliveryCost: number
+  deliveryNote?: string | null
+  paymentSurcharge: number
+  total: number
+}
+
 export interface DeliveryAddress {
   city: string
   street: string
@@ -123,6 +146,7 @@ export interface Order {
     price: number
   }>
   servicesTotal?: number
+  receiptSnapshot?: ReceiptSnapshot | null
   createdAt: string
   updatedAt: string
 }

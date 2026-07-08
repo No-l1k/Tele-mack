@@ -67,7 +67,11 @@ export default function AdminOrderPrintPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <OrderReceiptToolbar backHref={`/admin/orders/${id}`} backLabel="К заказу" />
+      <OrderReceiptToolbar
+        backHref={`/admin/orders/${id}`}
+        backLabel="К заказу"
+        editHref={`/admin/orders/${id}/receipt-edit`}
+      />
       <OrderReceipt order={order} store={store} settings={settings} />
     </div>
   )

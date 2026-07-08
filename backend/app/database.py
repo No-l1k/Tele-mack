@@ -97,6 +97,7 @@ def ensure_order_columns() -> None:
         column_ddl = {
             "selected_services": "ALTER TABLE orders ADD COLUMN selected_services JSON",
             "services_total": "ALTER TABLE orders ADD COLUMN services_total INTEGER DEFAULT 0",
+            "receipt_snapshot": "ALTER TABLE orders ADD COLUMN receipt_snapshot JSON",
         }
 
         for column, ddl in column_ddl.items():
