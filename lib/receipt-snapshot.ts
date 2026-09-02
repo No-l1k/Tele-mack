@@ -13,7 +13,7 @@ export function formatOrderDeliveryAddress(order: Order): string {
 
 function defaultDeliveryNote(order: Order): string {
   if (order.deliveryMethod === 'courier') {
-    return 'Доставка по Москве и МО — согласно условиям магазина. За МКАД — доплата 50 руб./км.'
+    return 'Доставка по Москве и МО — согласно условиям магазина. За МКАД — доплата 70 руб./км.'
   }
   return 'Самовывоз по адресу магазина или согласованному пункту выдачи.'
 }

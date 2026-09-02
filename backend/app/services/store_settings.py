@@ -3,9 +3,11 @@
 from sqlalchemy.orm import Session
 
 from ..models import Setting
+from ..pricing_constants import REGION_COST_PER_KM_DEFAULT
 
 DEFAULT_MIN_ORDER_SUBTOTAL_RUB = 4000
 LEGACY_MIN_ORDER_SUBTOTAL_RUB = 1
+LEGACY_REGION_COST_PER_KM = 50
 
 
 def resolve_min_order_subtotal_rub(raw: object) -> int:
@@ -21,10 +23,26 @@ def resolve_min_order_subtotal_rub(raw: object) -> int:
     return value
 
 
+def resolve_region_cost_per_km(raw: object) -> int:
+    """Стоимость км за МКАД; устаревшее 50 → актуальный дефолт 70."""
+    if raw is None or raw == "":
+        return REGION_COST_PER_KM_DEFAULT
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return REGION_COST_PER_KM_DEFAULT
+    if value < 0:
+        return REGION_COST_PER_KM_DEFAULT
+    if value == LEGACY_REGION_COST_PER_KM:
+        return REGION_COST_PER_KM_DEFAULT
+    return value
+
+
 def normalize_delivery_info(delivery_info: object) -> dict:
-    """Нормализует deliveryInfo; исправляет устаревший moscowMinSum=1."""
+    """Нормализует deliveryInfo; исправляет устаревшие moscowMinSum и regionCostPerKm."""
     data = dict(delivery_info) if isinstance(delivery_info, dict) else {}
     data["moscowMinSum"] = resolve_min_order_subtotal_rub(data.get("moscowMinSum"))
+    data["regionCostPerKm"] = resolve_region_cost_per_km(data.get("regionCostPerKm"))
     return data
 
 

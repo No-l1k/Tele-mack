@@ -1,3 +1,6 @@
-"""Фиксированные суммы для расчёта заказов (дублируют lib/pricing.ts при необходимости)."""
+COURIER_DELIVERY_DEFAULT_RUB = 1000
+COURIER_DELIVERY_EXTRA_TV_RUB = 700
+REGION_COST_PER_KM_DEFAULT = 70
 
-COURIER_DELIVERY_COST_RUB = 1000
+# Обратная совместимость (старый код, фид, fallback в order_to_dict)
+COURIER_DELIVERY_COST_RUB = COURIER_DELIVERY_DEFAULT_RUB

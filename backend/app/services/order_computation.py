@@ -8,16 +8,15 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models import OrderItem, Product
-from ..pricing_constants import COURIER_DELIVERY_COST_RUB
+from ..pricing_constants import COURIER_DELIVERY_DEFAULT_RUB
 from ..schemas import OrderItemCreate, OrderItemUpdate
 from ..services.checkout_services import checkout_services_map_from_settings
 from ..services.products import product_available_for_order
 from ..services.tv_checkout_services import (
     LEGACY_TV_CHECKOUT_SERVICE_IDS,
+    resolve_courier_delivery_cost,
     resolve_tv_checkout_service,
 )
-
-COURIER_DELIVERY_COST = COURIER_DELIVERY_COST_RUB
 
 
 @dataclass
@@ -182,7 +181,11 @@ def compute_order(
     services_total = sum(int(service["price"]) for service in selected_services)
     has_tv_pixel = any(str(s.get("id", "")).startswith("tv-pixel:") for s in selected_services)
     has_tv_install = any(str(s.get("id", "")).startswith("tv-install:") for s in selected_services)
-    delivery_cost = COURIER_DELIVERY_COST if delivery_method == "courier" else 0
+    delivery_cost = (
+        resolve_courier_delivery_cost(products_by_id, quantities_by_product)
+        if delivery_method == "courier"
+        else 0
+    )
     total = subtotal + surcharge + services_total + delivery_cost
 
     return OrderComputation(

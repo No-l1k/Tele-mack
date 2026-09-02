@@ -70,9 +70,9 @@ def list_orders(
 @router.post("", response_model=ApiResponse)
 def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
     if payload.paymentMethod not in ALLOWED_PAYMENT_METHODS:
-        raise HTTPException(status_code=400, detail="Invalid payment method")
+        raise HTTPException(status_code=400, detail="Неверный способ оплаты")
     if payload.deliveryMethod not in ALLOWED_DELIVERY_METHODS:
-        raise HTTPException(status_code=400, detail="Invalid delivery method")
+        raise HTTPException(status_code=400, detail="Неверный способ доставки")
 
     computed = compute_order(
         db,
@@ -141,9 +141,9 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
 @router.put("/{order_id}", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])
 def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_db)):
     if payload.paymentMethod not in ALLOWED_PAYMENT_METHODS:
-        raise HTTPException(status_code=400, detail="Invalid payment method")
+        raise HTTPException(status_code=400, detail="Неверный способ оплаты")
     if payload.deliveryMethod not in ALLOWED_DELIVERY_METHODS:
-        raise HTTPException(status_code=400, detail="Invalid delivery method")
+        raise HTTPException(status_code=400, detail="Неверный способ доставки")
 
     order = (
         db.query(Order)

@@ -21,7 +21,7 @@ import type { Product } from '@/types'
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, total, itemsCount } = useCart()
-  const deliveryCost = calculateDeliveryCost(total, 'courier')
+  const deliveryCost = calculateDeliveryCost(items, 'courier')
 
   const { toggleFavorite, isFavorite } = useFavorites()
   const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([])

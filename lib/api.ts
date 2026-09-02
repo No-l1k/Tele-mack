@@ -68,26 +68,7 @@ type CategoryUpdatePayload = Partial<Omit<Category, 'children' | 'parentId'>> & 
   image?: string | null
 }
 
-function formatApiErrorBody(body: unknown): string {
-  if (!body || typeof body !== 'object') return 'Ошибка сервера'
-  const record = body as Record<string, unknown>
-  if (typeof record.message === 'string') return record.message
-  if (typeof record.detail === 'string') {
-    if (record.detail === 'Invalid credentials') return 'Неверный логин или пароль'
-    return record.detail
-  }
-  if (Array.isArray(record.detail)) {
-    return record.detail
-      .map((item) => {
-        if (item && typeof item === 'object' && 'msg' in item) {
-          return String((item as { msg?: string }).msg ?? item)
-        }
-        return String(item)
-      })
-      .join('; ')
-  }
-  return 'Ошибка сервера'
-}
+import { formatApiErrorBody } from '@/lib/api-errors'
 
 // ============================================
 // Базовые функции для HTTP запросов
@@ -126,11 +107,11 @@ async function fetchApi<T>(
   try {
     response = await fetch(url, { ...config, signal: controller.signal })
   } catch (error) {
-    if (typeof window !== 'undefined') {
-      console.error('[API] сеть недоступна:', url, error)
-    }
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('Сервер не отвечает. Перезапустите dev:all и убедитесь, что порт 8000 свободен.')
+    }
+    if (typeof window !== 'undefined') {
+      console.error('[API] сеть недоступна:', url, error)
     }
     throw error
   } finally {

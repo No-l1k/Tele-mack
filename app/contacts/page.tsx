@@ -41,19 +41,32 @@ export default function ContactsPage() {
     setError('')
     setIsSubmitting(true)
 
+    const name = formData.name.trim()
+    const message = formData.message.trim()
+
+    if (name.length < 2) {
+      setError('Имя: минимум 2 символа')
+      setIsSubmitting(false)
+      return
+    }
     if (!isCompleteRuPhone(formData.phone)) {
       setError('Введите телефон полностью в формате +7 (999) 999-99-99')
+      setIsSubmitting(false)
+      return
+    }
+    if (message.length < 5) {
+      setError('Сообщение: минимум 5 символов')
       setIsSubmitting(false)
       return
     }
 
     try {
       await publicSettingsApi.sendContactRequest({
-        name: formData.name.trim(),
+        name,
         phone: formData.phone.trim(),
         email: formData.email.trim() || undefined,
         subject: formData.subject.trim() || undefined,
-        message: formData.message.trim(),
+        message,
       })
       setIsSubmitted(true)
       setFormData({ name: '', phone: '', email: '', subject: '', message: '' })

@@ -71,10 +71,12 @@ export default function CategoryPageClient({
     const activeSpecFilters = Object.fromEntries(
       Object.entries(selectedSpecFilters).filter(([, values]) => values.length > 0),
     )
+    const priceMin = selectedPriceRange[0]
+    const priceMax = selectedPriceRange[1]
     const filters: ProductFiltersType = {
       categorySlug,
-      minPrice: selectedPriceRange[0] || undefined,
-      maxPrice: selectedPriceRange[1] || undefined,
+      minPrice: priceMin || undefined,
+      maxPrice: priceMax || undefined,
       brands: selectedBrands.length ? selectedBrands : undefined,
       inStock: inStockOnly || undefined,
       sortBy: normalizedSort,
@@ -104,11 +106,15 @@ export default function CategoryPageClient({
           setBrands(meta.brands)
           setComputedPriceRange(meta.priceRange)
           setSpecFacets(meta.specFacets ?? {})
-          if (!didInitFilters && meta.priceRange.max > 0) {
-            setSelectedPriceRange([meta.priceRange.min, meta.priceRange.max])
-            setDidInitFilters(true)
-          }
           setHasLoadedOnce(true)
+          // Инициализацию диапазона цен делаем отдельно, чтобы не зациклить эффект
+          setDidInitFilters((prev) => {
+            if (!prev && meta.priceRange.max > meta.priceRange.min) {
+              setSelectedPriceRange([meta.priceRange.min, meta.priceRange.max])
+              return true
+            }
+            return prev || true
+          })
         }
       } catch {
         if (!cancelled) {
@@ -131,7 +137,8 @@ export default function CategoryPageClient({
     return () => {
       cancelled = true
     }
-  }, [categorySlug, selectedBrands, selectedPriceRange, selectedSpecFilters, inStockOnly, sortBy, currentPage, didInitFilters])
+    // selectedPriceRange — через примитивы, didInitFilters не в deps (иначе двойной запрос при init)
+  }, [categorySlug, selectedBrands, selectedPriceRange[0], selectedPriceRange[1], selectedSpecFilters, inStockOnly, sortBy, currentPage, hydrated])
 
   const resetFilters = () => {
     setSelectedBrands([])

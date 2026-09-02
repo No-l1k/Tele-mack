@@ -30,7 +30,7 @@ DEFAULT_STORE_SETTINGS = {
     "email": "shop@example.com",
     "address": "Москва",
     "workingHours": "Пн-Вс: 9:00-21:00",
-    "deliveryInfo": {"moscowFree": True, "moscowMinSum": 4000, "regionCostPerKm": 50, "deliveryDays": "1-3 дня"},
+    "deliveryInfo": {"moscowFree": True, "moscowMinSum": 4000, "regionCostPerKm": 70, "deliveryDays": "1-3 дня"},
     "paymentMethods": {"cash": True, "card": True, "cardSurcharge": 15, "pickup": True},
     "social": {"whatsapp": "+79000000000", "telegram": "@telemakc"},
     "heroBanners": [

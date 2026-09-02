@@ -45,11 +45,15 @@ export default function DeliveryPage() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                      <span>Базовая стоимость доставки - <strong>1 000 руб</strong></span>
+                      <span>Телевизоры: от <strong>1 000 руб</strong> (32–40″) до <strong>5 500 руб</strong> (90″ и больше)</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                      <span>За МКАД - <strong>+50 руб/км</strong> к базовому тарифу</span>
+                      <span>Другие товары — <strong>1 000 руб</strong>; каждый следующий ТВ в заказе +700 руб</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span>За МКАД — <strong>+70 руб/км</strong> к базовому тарифу</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-green-500" />
@@ -100,8 +104,8 @@ export default function DeliveryPage() {
             <Card className="mt-6">
               <CardContent className="p-6">
                 <p className="text-sm text-muted-foreground">
-                  <strong>Минимальная сумма заказа:</strong> {formatPrice(DEFAULT_MIN_ORDER_AMOUNT_RUB)}. По Москве и Московской области действует фиксированный тариф 1 000 руб
-                  и доплата 50 руб/км за МКАД. По России отправляем после 100% предоплаты товара и подтверждения стоимости перевозки транспортной компанией.
+                  <strong>Минимальная сумма заказа:</strong> {formatPrice(DEFAULT_MIN_ORDER_AMOUNT_RUB)}. Тариф курьера зависит от диагонали ТВ (32–40″ — 1 000 руб, 50–65″ — 1 500 руб, 70–75″ — 2 000 руб, 83–89″ — 3 000 руб, от 90″ — 5 500 руб)
+                  и доплата 70 руб/км за МКАД. По России отправляем после 100% предоплаты товара и подтверждения стоимости перевозки транспортной компанией.
                 </p>
               </CardContent>
             </Card>

@@ -67,6 +67,45 @@ def installation_price(diagonal: int | None) -> int:
     return 5500
 
 
+def courier_delivery_price_by_diagonal(diagonal: int | None) -> int:
+    """Базовый тариф курьерской доставки одного ТВ по диагонали (руб., без доплаты за км)."""
+    if diagonal is None or diagonal < 32:
+        return 1000
+    if diagonal >= 90:
+        return 5500
+    if diagonal >= 83:
+        return 3000
+    if diagonal >= 70:
+        return 2000
+    if diagonal >= 50:
+        return 1500
+    return 1000
+
+
+def resolve_courier_delivery_cost(
+    products_by_id: dict[int, Product],
+    quantities_by_product: dict[int, int],
+) -> int:
+    """Стоимость доставки курьером: по крупнейшему ТВ + 700 ₽ за каждый следующий; без ТВ — 1000 ₽."""
+    from ..pricing_constants import COURIER_DELIVERY_DEFAULT_RUB, COURIER_DELIVERY_EXTRA_TV_RUB
+
+    unit_prices: list[int] = []
+    for product_id, quantity in quantities_by_product.items():
+        product = products_by_id.get(product_id)
+        if not product or not is_tv_product(product):
+            continue
+        specs = product.specs if isinstance(product.specs, dict) else {}
+        diagonal = parse_screen_diagonal_inches(specs)
+        unit_price = courier_delivery_price_by_diagonal(diagonal)
+        unit_prices.extend([unit_price] * max(int(quantity), 0))
+
+    if not unit_prices:
+        return COURIER_DELIVERY_DEFAULT_RUB
+    if len(unit_prices) == 1:
+        return unit_prices[0]
+    return max(unit_prices) + (len(unit_prices) - 1) * COURIER_DELIVERY_EXTRA_TV_RUB
+
+
 def _format_price_rub(amount: int) -> str:
     return f"{amount:,}".replace(",", " ") + " ₽"
 

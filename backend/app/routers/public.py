@@ -10,7 +10,7 @@ from ..services.notifications import email_notifications_enabled, send_contact_r
 from ..services.order_numbers import allocate_next_order_id
 from ..services.products import product_available_for_order
 from ..services.store_settings import min_order_subtotal_rub, normalize_delivery_info
-from ..pricing_constants import COURIER_DELIVERY_COST_RUB
+from ..services.tv_checkout_services import resolve_courier_delivery_cost
 from ..services.checkout_services import DEFAULT_CHECKOUT_SERVICES, normalize_checkout_services
 
 router = APIRouter(prefix="/public", tags=["public"])
@@ -22,7 +22,7 @@ DEFAULT_STORE_SETTINGS = {
     "email": "shop@example.com",
     "address": "Москва",
     "workingHours": "Пн-Вс: 9:00-21:00",
-    "deliveryInfo": {"moscowFree": True, "moscowMinSum": 4000, "regionCostPerKm": 50, "deliveryDays": "1-3 дня"},
+    "deliveryInfo": {"moscowFree": True, "moscowMinSum": 4000, "regionCostPerKm": 70, "deliveryDays": "1-3 дня"},
     "paymentMethods": {"cash": True, "card": True, "cardSurcharge": 15, "pickup": True},
     "social": {"whatsapp": "+79000000000", "telegram": "@telemakc"},
     "heroBanners": [],
@@ -67,6 +67,9 @@ def get_public_store_settings(db: Session = Depends(get_db)):
     )
     if settings_data != row.value:
         row.value = settings_data
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(row, "value")
         db.commit()
         db.refresh(row)
     return ApiResponse(data=row.value)
@@ -75,7 +78,7 @@ def get_public_store_settings(db: Session = Depends(get_db)):
 @router.post("/contact", response_model=ApiResponse)
 def send_contact_request(payload: ContactRequestIn):
     if not email_notifications_enabled():
-        raise HTTPException(status_code=503, detail="Contact notifications are not configured")
+        raise HTTPException(status_code=503, detail="Отправка сообщений временно недоступна")
 
     try:
         send_contact_request_email(
@@ -111,11 +114,12 @@ def create_quick_order(payload: QuickOrderCreateIn, db: Session = Depends(get_db
     images = (product.specs or {}).get("images", [])
     comment = (payload.comment or "").strip()
     order_comment = f"Покупка в 1 клик. Комментарий клиента: {comment}" if comment else "Покупка в 1 клик"
+    delivery_cost = resolve_courier_delivery_cost({product.id: product}, {product.id: quantity})
 
     order = Order(
         id=allocate_next_order_id(db),
         status="pending",
-        total=line_total + COURIER_DELIVERY_COST_RUB,
+        total=line_total + delivery_cost,
         payment_status="pending",
         delivery_method="courier",
         payment_method="cash",

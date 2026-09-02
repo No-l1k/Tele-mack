@@ -21,7 +21,7 @@ const initialState: StoreSettings = {
   deliveryInfo: {
     moscowFree: true,
     moscowMinSum: 4000,
-    regionCostPerKm: 50,
+    regionCostPerKm: 70,
     deliveryDays: '',
   },
   paymentMethods: {

@@ -190,7 +190,7 @@ export default function AdminOrderEditPage() {
     [lineItems]
   )
 
-  const deliveryCost = calculateDeliveryCost(subtotal, formData.deliveryMethod)
+  const deliveryCost = calculateDeliveryCost(cartItems, formData.deliveryMethod)
   const paymentSurcharge =
     formData.paymentMethod === 'card' ? Math.round(subtotal * CARD_SURCHARGE_RATE) : 0
   const selectedServices = checkoutServices.filter((s) => selectedServiceIds.includes(s.id))

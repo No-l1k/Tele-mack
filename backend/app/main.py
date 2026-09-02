@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -22,6 +23,7 @@ from .database import (
 )
 from .routers import admin, auth, cart, categories, feeds, orders, products, public, reviews, users
 from .services.order_numbers import ensure_order_id_sequence
+from .validation_errors import validation_exception_handler
 
 settings.validate_runtime_security()
 
@@ -44,6 +46,8 @@ app = FastAPI(
     redoc_url="/redoc" if settings.expose_docs else None,
     openapi_url="/openapi.json" if settings.expose_docs else None,
 )
+
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 if settings.trusted_host_list:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list)

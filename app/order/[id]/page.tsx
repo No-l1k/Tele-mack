@@ -114,7 +114,7 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
                     <p className="font-medium">{formatDeliveryMethod(order.deliveryMethod)}</p>
                     {order.deliveryMethod === 'courier' && (
                       <p className="text-sm text-muted-foreground">
-                        Доставка по Москве и МО - 1 000 руб. За МКАД дополнительно +50 руб/км. По России отправка осуществляется после 100% предоплаты и расчета транспортной компанией.
+                        Доставка по Москве и МО — от 1 000 руб (зависит от диагонали ТВ). За МКАД дополнительно +70 руб/км. По России отправка осуществляется после 100% предоплаты и расчета транспортной компанией.
                       </p>
                     )}
                   </div>

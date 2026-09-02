@@ -20,7 +20,7 @@ const features = [
   {
     icon: Truck,
     title: 'Доставка по Москве и МО',
-    description: 'Фиксировано 1 000 руб, за МКАД +50 руб/км',
+    description: 'От 1 000 руб по диагонали ТВ, за МКАД +70 руб/км',
   },
   {
     icon: Shield,

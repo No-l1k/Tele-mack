@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useCart } from '@/context/cart-context'
 import { formatPrice, formatItemsCount } from '@/lib/formatters'
 import { ordersApi, publicSettingsApi, type CheckoutService } from '@/lib/api'
-import { CARD_SURCHARGE_RATE, calculateDeliveryCost } from '@/lib/pricing'
+import { CARD_SURCHARGE_RATE, COURIER_DELIVERY_DEFAULT, allocateCourierDeliveryByProduct, calculateDeliveryCost } from '@/lib/pricing'
 import { saveOrderAccess } from '@/lib/order-access'
 import { isCompleteRuPhone } from '@/lib/phone'
 import {
@@ -105,7 +105,14 @@ export default function CheckoutPage() {
   }, [availableServiceIds])
 
   // Calculate costs
-  const deliveryCost = calculateDeliveryCost(total, formData.deliveryMethod)
+  const deliveryCost = calculateDeliveryCost(items, formData.deliveryMethod)
+  const deliveryByProduct = useMemo(
+    () =>
+      formData.deliveryMethod === 'courier'
+        ? allocateCourierDeliveryByProduct(items)
+        : new Map<string, number[]>(),
+    [formData.deliveryMethod, items]
+  )
   const paymentSurcharge = formData.paymentMethod === 'card' ? Math.round(total * CARD_SURCHARGE_RATE) : 0
   const selectedServices = useMemo(
     () => checkoutServices.filter((service) => selectedServiceIds.includes(service.id)),
@@ -340,13 +347,15 @@ export default function CheckoutPage() {
                             Курьером
                           </Label>
                           <p className="text-sm text-muted-foreground mt-1">
-                            Стоимость курьерской доставки по Москве и МО - 1 000 руб. За пределами МКАД дополнительно оплачивается 50 руб/км. Для отправки по России действует 100% предоплата после расчета стоимости транспортной компанией.
+                            Стоимость курьерской доставки зависит от диагонали ТВ (от 1 000 руб). За пределами МКАД дополнительно оплачивается 70 руб/км. Для отправки по России действует 100% предоплата после расчета стоимости транспортной компанией.
                           </p>
                           <p className="text-sm text-primary mt-1">
                             Минимальная сумма заказа — {formatPrice(minOrderSum)}
                           </p>
                         </div>
-                        <div className="font-medium">+ 1 000 руб</div>
+                        <div className="font-medium whitespace-nowrap">
+                          + {formatPrice(deliveryCost || COURIER_DELIVERY_DEFAULT)}
+                        </div>
                       </div>
                       
                       <div className="flex items-start gap-3 p-4 border rounded-lg">
@@ -516,7 +525,13 @@ export default function CheckoutPage() {
                   <CardContent className="space-y-4">
                     {/* Items */}
                     <div className="space-y-3 max-h-64 overflow-y-auto">
-                      {items.map(item => (
+                      {items.map(item => {
+                        const deliveryParts = deliveryByProduct.get(String(item.product.id)) ?? []
+                        const deliverySuffix =
+                          deliveryParts.length > 0
+                            ? deliveryParts.map((amount: number) => ` + доставка ${formatPrice(amount)}`).join('')
+                            : ''
+                        return (
                         <div key={item.product.id} className="flex gap-3">
                           <div className="flex-shrink-0 w-12 h-12 bg-muted/30 rounded overflow-hidden">
                             <ProductImage
@@ -532,11 +547,13 @@ export default function CheckoutPage() {
                               {item.product.name}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              {item.quantity} x {formatPrice(item.product.price)}
+                              {item.quantity} × {formatPrice(item.product.price)}
+                              {deliverySuffix}
                             </p>
                           </div>
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                     
                     <div className="border-t pt-4 space-y-2">

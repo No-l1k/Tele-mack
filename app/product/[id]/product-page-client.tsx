@@ -125,6 +125,11 @@ export default function ProductPageClient({
     setQuickOrderError('')
     setQuickOrderSuccess('')
 
+    if (!quickOrderForm.name.trim() || quickOrderForm.name.trim().length < 2) {
+      setQuickOrderError('Имя: минимум 2 символа')
+      return
+    }
+
     if (!isCompleteRuPhone(quickOrderForm.phone)) {
       setQuickOrderError('Введите телефон полностью в формате +7 (999) 999-99-99')
       return
@@ -412,7 +417,7 @@ export default function ProductPageClient({
                 <Truck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                 <div>
                   <div className="font-medium text-sm">Доставка по фиксированному тарифу</div>
-                  <div className="text-xs text-muted-foreground">1 000 руб по Москве и МО, за МКАД +50 руб/км</div>
+                  <div className="text-xs text-muted-foreground">От 1 000 руб по Москве и МО (зависит от диагонали ТВ), за МКАД +70 руб/км</div>
                 </div>
               </div>
 
