@@ -18,6 +18,8 @@ ARG NEXT_PUBLIC_YANDEX_METRIKA_ID=
 ENV NEXT_PUBLIC_YANDEX_METRIKA_ID=${NEXT_PUBLIC_YANDEX_METRIKA_ID}
 # Backend во время docker build недоступен — не задаём API_URL_INTERNAL
 ENV NODE_OPTIONS=--max-old-space-size=1536
+# Typecheck на VPS часто уходит в swap на 20–40 мин — проверяем локально (npm run typecheck)
+ENV SKIP_NEXT_TYPECHECK=1
 
 RUN npm run build
 

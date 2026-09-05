@@ -33,6 +33,14 @@ function uploadsPatternsFromSiteUrl() {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // На слабом VPS typecheck в Docker часто съедает RAM и «висит» десятки минут.
+  // Локально/в CI проверяйте: npm run typecheck
+  typescript: {
+    ignoreBuildErrors: process.env.SKIP_NEXT_TYPECHECK === '1',
+  },
+  eslint: {
+    ignoreDuringBuilds: process.env.SKIP_NEXT_TYPECHECK === '1',
+  },
   images: {
     unoptimized: process.env.NODE_ENV !== 'production',
     localPatterns: [
