@@ -32,6 +32,7 @@ import { formatPrice } from '@/lib/formatters'
 import { categoriesApi, productsApi } from '@/lib/api'
 import type { Category, Product, ProductFilters } from '@/types'
 import { toast } from 'sonner'
+import { SpecTemplatesDialog } from '@/components/admin/spec-templates-dialog'
 import {
   Plus,
   Search,
@@ -42,6 +43,7 @@ import {
   Package,
   Download,
   Filter,
+  ListChecks,
 } from 'lucide-react'
 
 type FlatCategory = { id: string; slug: string; name: string; depth: number }
@@ -166,6 +168,7 @@ export default function AdminProductsPage() {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
 
   const categoryNameBySlug = useMemo(() => {
     const map = new Map<string, string>()
@@ -253,14 +256,18 @@ export default function AdminProductsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Товары</h1>
           <p className="text-muted-foreground">
             Управление каталогом товаров
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => setTemplatesOpen(true)}>
+            <ListChecks className="h-4 w-4 mr-2" />
+            Шаблоны характеристик
+          </Button>
           <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
             CSV
@@ -273,6 +280,8 @@ export default function AdminProductsPage() {
           </Link>
         </div>
       </div>
+
+      <SpecTemplatesDialog open={templatesOpen} onOpenChange={setTemplatesOpen} />
 
       <Card>
         <CardHeader>

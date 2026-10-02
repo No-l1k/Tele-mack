@@ -22,6 +22,7 @@ import type {
   OrderStatus,
   SpecDictionaryItem,
 } from '@/types'
+import type { SpecTemplate } from '@/lib/product-spec-templates'
 
 import { getApiBaseUrl } from '@/lib/api-base-url'
 
@@ -830,6 +831,19 @@ export const settingsApi = {
   },
 }
 
+export const specTemplatesApi = {
+  get: (): Promise<ApiResponse<{ templates: SpecTemplate[] }>> => {
+    return fetchApi('/admin/spec-templates')
+  },
+
+  update: (templates: SpecTemplate[]): Promise<ApiResponse<{ templates: SpecTemplate[] }>> => {
+    return fetchApi('/admin/spec-templates', {
+      method: 'PUT',
+      body: JSON.stringify({ templates }),
+    })
+  },
+}
+
 export const publicSettingsApi = {
   /**
    * GET /public/settings - Публичные настройки витрины
@@ -884,6 +898,7 @@ export const api = {
   reviews: reviewsApi,
   dashboard: dashboardApi,
   settings: settingsApi,
+  specTemplates: specTemplatesApi,
   publicSettings: publicSettingsApi,
 }
 

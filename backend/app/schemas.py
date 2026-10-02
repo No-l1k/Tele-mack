@@ -292,6 +292,23 @@ class StoreSocialIn(BaseModel):
     viber: str | None = None
 
 
+class SpecDefinitionIn(BaseModel):
+    name: str
+    values: list[str] = Field(default_factory=list)
+
+
+class SpecTemplateIn(BaseModel):
+    id: str | None = None
+    title: str = ""
+    match: list[str] = Field(default_factory=list)
+    categoryIds: list[int] = Field(default_factory=list)
+    specs: list[SpecDefinitionIn] = Field(default_factory=list)
+
+
+class SpecTemplatesUpdateIn(BaseModel):
+    templates: list[SpecTemplateIn]
+
+
 class StoreSettingsUpdateIn(BaseModel):
     name: str | None = None
     phone: str | None = None

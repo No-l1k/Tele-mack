@@ -14,7 +14,8 @@ from ..config import settings
 from ..database import SessionLocal, get_db
 from ..deps import get_current_admin
 from ..models import Category, Order, OrderItem, Product, Setting, User
-from ..schemas import ApiResponse, StoreSettingsUpdateIn
+from ..product_spec_templates import load_spec_templates, save_spec_templates
+from ..schemas import ApiResponse, SpecTemplatesUpdateIn, StoreSettingsUpdateIn
 from ..rate_limit import rate_limit
 from ..services.checkout_services import DEFAULT_CHECKOUT_SERVICES, normalize_checkout_services
 from ..services.product_categories import sync_product_category_memberships
@@ -524,3 +525,14 @@ def get_import_yml_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Import job not found")
     return ApiResponse(data=job)
+
+
+@router.get("/spec-templates", response_model=ApiResponse)
+def get_spec_templates(db: Session = Depends(get_db)):
+    return ApiResponse(data={"templates": load_spec_templates(db)})
+
+
+@router.put("/spec-templates", response_model=ApiResponse)
+def update_spec_templates(payload: SpecTemplatesUpdateIn, db: Session = Depends(get_db)):
+    templates = save_spec_templates(db, [item.model_dump() for item in payload.templates])
+    return ApiResponse(data={"templates": templates})

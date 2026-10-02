@@ -6,8 +6,10 @@ export type SpecDefinition = {
 }
 
 export type SpecTemplate = {
+  id?: string
   title: string
   match: string[]
+  categoryIds?: number[]
   specs: SpecDefinition[]
 }
 
@@ -15,8 +17,10 @@ export const YES_NO_SPEC_VALUES = ['есть', 'нет'] as const
 
 export const SPEC_TEMPLATES: SpecTemplate[] = [
   {
+    id: 'default-1',
     title: 'Телевизоры',
     match: ['телевиз', 'tv', 'tvs', 'televizor'],
+    categoryIds: [],
     specs: [
       { name: 'Диагональ экрана (дюйм)' },
       { name: 'Поддержка Smart TV', values: [...YES_NO_SPEC_VALUES] },
@@ -29,8 +33,10 @@ export const SPEC_TEMPLATES: SpecTemplate[] = [
     ],
   },
   {
+    id: 'default-2',
     title: 'Кронштейны',
     match: ['кронштейн', 'bracket', 'mount', 'holder'],
+    categoryIds: [],
     specs: [
       { name: 'Назначение кронштейна', values: ['для AV-оборудования', 'для мониторов', 'для телевизоров'] },
       { name: 'Место крепления кронштейна', values: ['потолок', 'стена', 'стол'] },
@@ -41,8 +47,10 @@ export const SPEC_TEMPLATES: SpecTemplate[] = [
     ],
   },
   {
+    id: 'default-3',
     title: 'Саундбары',
     match: ['саундбар', 'soundbar'],
+    categoryIds: [],
     specs: [
       { name: 'Суммарная мощность', values: ['до 100 Вт', 'от 101 до 200 Вт', 'от 201 до 390 Вт', 'от 400 Вт'] },
       { name: 'Bluetooth', values: [...YES_NO_SPEC_VALUES] },
@@ -59,10 +67,53 @@ export function normalizeForCategoryMatch(value: string) {
   return value.trim().replace(/ё/g, 'е').toLocaleLowerCase('ru-RU')
 }
 
-export function getSpecTemplate(category?: Pick<Category, 'name' | 'slug'> | null): SpecTemplate | null {
+export function categoryAncestorIds(
+  categories: Category[],
+  categoryId?: string | number | null,
+): number[] {
+  const parentById = new Map<string, string>()
+  const walk = (nodes: Category[]) => {
+    for (const node of nodes) {
+      if (node.parentId != null && String(node.parentId)) {
+        parentById.set(String(node.id), String(node.parentId))
+      }
+      if (node.children?.length) walk(node.children)
+    }
+  }
+  walk(categories)
+
+  const ids: number[] = []
+  let current = categoryId != null && String(categoryId) ? String(categoryId) : ''
+  const seen = new Set<string>()
+  while (current && !seen.has(current)) {
+    seen.add(current)
+    const numeric = Number(current)
+    if (Number.isFinite(numeric) && numeric > 0) ids.push(numeric)
+    current = parentById.get(current) ?? ''
+  }
+  return ids
+}
+
+export function resolveSpecTemplate(
+  templates: SpecTemplate[],
+  category?: Pick<Category, 'id' | 'name' | 'slug'> | null,
+  ancestorIds: Array<string | number> = [],
+): SpecTemplate | null {
   if (!category) return null
+  const chain = ancestorIds.length
+    ? ancestorIds.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+    : [Number(category.id)].filter((id) => Number.isFinite(id) && id > 0)
+  for (const categoryId of chain) {
+    const bound = templates.find((template) => (template.categoryIds ?? []).includes(categoryId))
+    if (bound) return bound
+  }
   const haystack = normalizeForCategoryMatch(`${category.name} ${category.slug}`)
-  return SPEC_TEMPLATES.find((template) => template.match.some((keyword) => haystack.includes(keyword))) ?? null
+  if (!haystack) return null
+  return templates.find((template) => template.match.some((keyword) => haystack.includes(keyword))) ?? null
+}
+
+export function getSpecTemplate(category?: Pick<Category, 'id' | 'name' | 'slug'> | null): SpecTemplate | null {
+  return resolveSpecTemplate(SPEC_TEMPLATES, category)
 }
 
 export function orderFacetValues(definition: SpecDefinition, available: Set<string>): string[] {

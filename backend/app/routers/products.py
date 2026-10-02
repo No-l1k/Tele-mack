@@ -550,7 +550,12 @@ def get_product_filters_meta(
     )
     category_row = db.query(Category).filter(Category.slug == category).first() if category else None
     template = (
-        get_spec_template_for_category(name=category_row.name, slug=category_row.slug)
+        get_spec_template_for_category(
+            db,
+            category_id=category_row.id,
+            name=category_row.name,
+            slug=category_row.slug,
+        )
         if category_row
         else None
     )

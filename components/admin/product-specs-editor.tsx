@@ -4,10 +4,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { CircleHelp, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
 import { SpecAutocomplete, type SpecSuggestionGroup } from '@/components/admin/spec-autocomplete'
-import { productsApi } from '@/lib/api'
-import { getSpecTemplate } from '@/lib/product-spec-templates'
+import { SpecHintEditor } from '@/components/admin/spec-hint-editor'
+import { productsApi, specTemplatesApi, categoriesApi } from '@/lib/api'
+import {
+  categoryAncestorIds,
+  resolveSpecTemplate,
+  SPEC_TEMPLATES,
+  type SpecTemplate,
+} from '@/lib/product-spec-templates'
 import { cn } from '@/lib/utils'
 import type { Category, SpecDictionaryItem } from '@/types'
 
@@ -54,10 +59,37 @@ type ProductSpecsEditorProps = {
 }
 
 export function ProductSpecsEditor({ category, rows, onChange }: ProductSpecsEditorProps) {
-  const template = getSpecTemplate(category)
+  const [templates, setTemplates] = useState<SpecTemplate[]>(SPEC_TEMPLATES)
+  const [categoryTree, setCategoryTree] = useState<Category[]>([])
+  const ancestorIds = useMemo(
+    () => categoryAncestorIds(categoryTree, category?.id),
+    [categoryTree, category?.id],
+  )
+  const template = resolveSpecTemplate(templates, category, ancestorIds)
   const definitions = template?.specs ?? []
   const [dictionary, setDictionary] = useState<SpecDictionaryItem[]>([])
   const [openHintId, setOpenHintId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    specTemplatesApi
+      .get()
+      .then((response) => {
+        if (!cancelled && response.data?.templates?.length) {
+          setTemplates(response.data.templates)
+        }
+      })
+      .catch(() => {})
+    categoriesApi
+      .getTree()
+      .then((response) => {
+        if (!cancelled) setCategoryTree(response.data ?? [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -203,7 +235,7 @@ export function ProductSpecsEditor({ category, rows, onChange }: ProductSpecsEdi
         <div>
           <CardTitle>Характеристики</CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Кнопка «?» добавляет подсказку к названию характеристики. Она общая для всех товаров с этим названием.
+            Кнопка «?» открывает текст подсказки для покупателя. Enter делает новую строку, можно список и жирный.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -263,12 +295,7 @@ export function ProductSpecsEditor({ category, rows, onChange }: ProductSpecsEdi
                 </Button>
               </div>
               {hintOpen && (
-                <Textarea
-                  value={row.hint}
-                  onChange={(event) => updateSpecRow(row.id, 'hint', event.target.value)}
-                  placeholder="Текст подсказки для покупателя. Можно абзацы и списки через «- ». Жирный текст: **так**."
-                  className="min-h-24 bg-background"
-                />
+                <SpecHintEditor value={row.hint} onChange={(next) => updateSpecRow(row.id, 'hint', next)} />
               )}
             </div>
           )

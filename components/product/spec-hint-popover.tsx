@@ -13,10 +13,10 @@ function renderInline(text: string) {
   })
 }
 
-function SpecHintBody({ text }: { text: string }) {
+export function SpecHintBody({ text }: { text: string }) {
   const blocks: Array<{ type: 'p' | 'ul'; lines: string[] }> = []
 
-  for (const rawLine of text.split('\n')) {
+  for (const rawLine of text.replace(/\r\n/g, '\n').split('\n')) {
     const line = rawLine.trimEnd()
     const bullet = line.match(/^\s*(?:[-•*]|\d+\.)\s+(.*)$/)
     if (bullet) {
@@ -25,14 +25,11 @@ function SpecHintBody({ text }: { text: string }) {
       else blocks.push({ type: 'ul', lines: [bullet[1]] })
       continue
     }
-    if (!line.trim()) {
-      if (blocks.length > 0 && blocks[blocks.length - 1].type !== 'p') continue
-      continue
-    }
-    const last = blocks[blocks.length - 1]
-    if (last?.type === 'p') last.lines.push(line.trim())
-    else blocks.push({ type: 'p', lines: [line.trim()] })
+    if (!line.trim()) continue
+    blocks.push({ type: 'p', lines: [line.trim()] })
   }
+
+  if (blocks.length === 0) return null
 
   return (
     <div className="space-y-2 text-sm leading-5 text-foreground">
@@ -44,7 +41,7 @@ function SpecHintBody({ text }: { text: string }) {
             ))}
           </ul>
         ) : (
-          <p key={index}>{renderInline(block.lines.join(' '))}</p>
+          <p key={index}>{renderInline(block.lines[0])}</p>
         ),
       )}
     </div>
@@ -74,7 +71,11 @@ export function SpecHintPopover({ specName, hint }: SpecHintPopoverProps) {
           ?
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" side="right" className="w-[min(22rem,calc(100vw-2rem))] p-4">
+      <PopoverContent
+        align="start"
+        side="right"
+        className="w-[min(24rem,calc(100vw-2rem))] max-h-[min(28rem,70vh)] overflow-y-auto p-4"
+      >
         <SpecHintBody text={hint} />
       </PopoverContent>
     </Popover>
