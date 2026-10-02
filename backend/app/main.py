@@ -15,6 +15,7 @@ from .database import (
     is_sqlite,
     ensure_category_columns,
     ensure_order_columns,
+    ensure_order_indexes,
     ensure_order_item_columns,
     ensure_product_columns,
     ensure_product_categories_table,
@@ -34,6 +35,7 @@ if settings.db_auto_create:
     ensure_category_columns()
     ensure_order_columns()
     ensure_order_item_columns()
+    ensure_order_indexes()
 
 backfill_product_category_memberships()
 

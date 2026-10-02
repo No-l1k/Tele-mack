@@ -164,6 +164,26 @@ def backfill_product_category_memberships() -> None:
         connection.execute(text(insert_sql))
 
 
+def ensure_order_indexes() -> None:
+    """Индексы заказов для уже существующей SQLite (create_all их не добавит)."""
+    if not is_sqlite:
+        return
+    statements = (
+        "CREATE INDEX IF NOT EXISTS ix_orders_user_id_created_at ON orders (user_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_orders_created_at ON orders (created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_orders_status ON orders (status)",
+    )
+    with engine.begin() as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
+        }
+        if "orders" not in tables:
+            return
+        for ddl in statements:
+            connection.execute(text(ddl))
+
+
 def ensure_product_stock_flags_synced() -> None:
     """Синхронизирует in_stock со stock_status после смены логики остатков."""
     from .models import Product

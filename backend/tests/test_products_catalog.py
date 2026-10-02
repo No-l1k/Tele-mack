@@ -37,6 +37,7 @@ def _create_product(
     stock_status: str = "in_stock",
     gtin: str | None = None,
     sku: str | None = None,
+    spec_hints: dict | None = None,
 ) -> dict:
     payload = {
         "name": name,
@@ -58,6 +59,8 @@ def _create_product(
         payload["gtin"] = gtin
     if sku is not None:
         payload["sku"] = sku
+    if spec_hints is not None:
+        payload["specHints"] = spec_hints
     response = client.post("/api/products", headers=headers, json=payload)
     assert response.status_code == 200, response.text
     return response.json()["data"]
@@ -524,3 +527,91 @@ def test_product_can_belong_to_multiple_categories():
         headers=headers,
     )
     assert blocked_remove.status_code == 400
+
+
+def test_specs_dictionary_requires_admin_and_groups_values_by_name():
+    unauth = client.get("/api/products/specs/dictionary")
+    assert unauth.status_code in {401, 403}
+
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    tv_slug = f"televizory-{suffix}"
+    other_slug = f"other-{suffix}"
+    tv_id = _create_category(headers, name=f"Телевизоры {suffix}", slug=tv_slug)
+    other_id = _create_category(headers, name=f"Другое {suffix}", slug=other_slug)
+
+    color_key = f"Цвет {suffix}"
+    diagonal_key = f"Диагональ {suffix}"
+    power_key = f"Мощность {suffix}"
+
+    _create_product(
+        headers,
+        category_id=tv_id,
+        category_slug=tv_slug,
+        name=f"TV A {suffix}",
+        slug=f"tv-a-{suffix}",
+        specs={color_key: "Чёрный", diagonal_key: "55", "images": ["/fake.png"]},
+    )
+    _create_product(
+        headers,
+        category_id=other_id,
+        category_slug=other_slug,
+        name=f"Other {suffix}",
+        slug=f"other-{suffix}",
+        specs={color_key: "Белый", power_key: "100 Вт"},
+    )
+
+    global_response = client.get("/api/products/specs/dictionary", headers=headers)
+    assert global_response.status_code == 200, global_response.text
+    global_by_name = {item["name"]: item for item in global_response.json()["data"]["specs"]}
+    assert "images" not in global_by_name
+    assert {item["value"] for item in global_by_name[color_key]["values"]} == {"Чёрный", "Белый"}
+    assert {item["value"] for item in global_by_name[diagonal_key]["values"]} == {"55"}
+    assert "100 Вт" not in {item["value"] for item in global_by_name[color_key]["values"]}
+
+    tv_response = client.get("/api/products/specs/dictionary", params={"category_id": tv_id}, headers=headers)
+    assert tv_response.status_code == 200, tv_response.text
+    tv_by_name = {item["name"]: item for item in tv_response.json()["data"]["specs"]}
+    assert tv_by_name[color_key]["inCategory"] is True
+    assert tv_by_name[diagonal_key]["inCategory"] is True
+    assert tv_by_name[power_key]["inCategory"] is False
+
+
+def test_spec_hints_are_shared_between_products():
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    category_slug = f"hints-{suffix}"
+    category_id = _create_category(headers, name=f"Подсказки {suffix}", slug=category_slug)
+    spec_name = f"Разрешение экрана {suffix}"
+    hint = "Чем больше пикселей, тем выше разрешение.\n- **4K Ultra HD** - 3840×2160"
+
+    first = _create_product(
+        headers,
+        category_id=category_id,
+        category_slug=category_slug,
+        name=f"TV hint A {suffix}",
+        slug=f"tv-hint-a-{suffix}",
+        specs={spec_name: "4K Ultra HD"},
+        spec_hints={spec_name: hint},
+    )
+    assert first["specHints"][spec_name] == hint
+
+    fetched = client.get(f"/api/products/{first['id']}")
+    assert fetched.status_code == 200
+    assert fetched.json()["data"]["specHints"][spec_name] == hint
+
+    dictionary = client.get("/api/products/specs/dictionary", headers=headers)
+    assert dictionary.status_code == 200
+    by_name = {item["name"]: item for item in dictionary.json()["data"]["specs"]}
+    assert by_name[spec_name]["hint"] == hint
+
+    second = _create_product(
+        headers,
+        category_id=category_id,
+        category_slug=category_slug,
+        name=f"TV hint B {suffix}",
+        slug=f"tv-hint-b-{suffix}",
+        specs={spec_name: "Full HD"},
+    )
+    assert second["specHints"][spec_name] == hint
+

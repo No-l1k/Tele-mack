@@ -22,7 +22,7 @@ import {
   DescriptionBlocksEditor,
   type DescriptionBlocksEditorHandle,
 } from '@/components/admin/description-blocks-editor'
-import { ProductSpecsEditor, type SpecRow } from '@/components/admin/product-specs-editor'
+import { ProductSpecsEditor, specHintsFromRows, type SpecRow } from '@/components/admin/product-specs-editor'
 import { ProductCategoriesEditor } from '@/components/admin/product-categories-editor'
 import { resolveMediaUrl } from '@/lib/media'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
@@ -73,7 +73,7 @@ export default function EditProductPage() {
   const [photoBusy, setPhotoBusy] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '' }])
+  const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '', hint: '' }])
   const [ratingMode, setRatingMode] = useState<'manual' | 'auto'>('manual')
   const [descriptionHtml, setDescriptionHtml] = useState('')
   const [serviceInfoHtml, setServiceInfoHtml] = useState('')
@@ -117,8 +117,9 @@ export default function EditProductPage() {
             id: `spec-${idx + 1}`,
             key,
             value: String(value),
+            hint: loadedProduct.specHints?.[key] || '',
           }))
-        setSpecRows(rows.length > 0 ? rows : [{ id: 'spec-1', key: '', value: '' }])
+        setSpecRows(rows.length > 0 ? rows : [{ id: 'spec-1', key: '', value: '', hint: '' }])
         setMetaTitle(loadedProduct.metaTitle || '')
         setMetaDescription(loadedProduct.metaDescription || '')
       }
@@ -227,6 +228,7 @@ export default function EditProductPage() {
           ...specsFromRows,
           ...(product.images.length > 0 ? { images: product.images } : {}),
         },
+        specHints: specHintsFromRows(specRows),
         isNew: payload.get('isNew') === 'on',
         ratingMode,
         rating: ratingMode === 'manual' ? Number(payload.get('rating') || product.rating) : undefined,

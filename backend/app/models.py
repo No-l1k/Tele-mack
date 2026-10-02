@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -93,12 +93,22 @@ class Product(Base):
     favored_by: Mapped[list["Favorite"]] = relationship(back_populates="product", cascade="all, delete-orphan")
 
 
+class SpecHint(Base):
+    """Подсказка для названия характеристики, общая для всех товаров."""
+
+    __tablename__ = "spec_hints"
+
+    name: Mapped[str] = mapped_column(String(255), primary_key=True)
+    hint: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Order(Base):
     __tablename__ = "orders"
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="pending")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     total: Mapped[int] = mapped_column(Integer)
     payment_status: Mapped[str] = mapped_column(String(20), default="pending")
     delivery_method: Mapped[str] = mapped_column(String(20), default="courier")
@@ -116,10 +126,12 @@ class Order(Base):
     selected_services: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     services_total: Mapped[int] = mapped_column(Integer, default=0)
     receipt_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+
+    __table_args__ = (Index("ix_orders_user_id_created_at", "user_id", "created_at"),)
 
 
 class OrderItem(Base):

@@ -3,6 +3,7 @@ from ..services.product_categories import (
     build_product_categories_payload,
     collect_membership_category_ids,
 )
+from ..services.specs_dictionary import public_product_specs
 
 PURCHASABLE_STOCK_STATUSES = frozenset({"in_stock", "low_stock"})
 
@@ -32,7 +33,7 @@ def _normalize_product_images(specs: dict) -> list[str]:
 def product_to_dict(product: Product) -> dict:
     category = product.category
     specs = product.specs or {}
-    clean_specs = {key: value for key, value in specs.items() if key != "images"}
+    clean_specs = public_product_specs(specs)
     category_ids = collect_membership_category_ids(product)
     categories = build_product_categories_payload(product)
     return {

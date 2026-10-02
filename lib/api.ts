@@ -20,6 +20,7 @@ import type {
   ApiResponse,
   DashboardStats,
   OrderStatus,
+  SpecDictionaryItem,
 } from '@/types'
 
 import { getApiBaseUrl } from '@/lib/api-base-url'
@@ -40,6 +41,7 @@ interface ProductWritePayload {
   sku?: string
   gtin?: string
   specs: Record<string, string | string[] | number | boolean>
+  specHints?: Record<string, string>
   inStock: boolean
   stockStatus: 'in_stock' | 'low_stock' | 'preorder' | 'out_of_stock'
   isNew: boolean
@@ -264,6 +266,18 @@ export const productsApi = {
    */
   getBrands: (limit = 24): Promise<ApiResponse<string[]>> => {
     return fetchApi(`/products/brands?limit=${limit}`)
+  },
+
+  /**
+   * GET /products/specs/dictionary - Словарь характеристик из каталога (admin)
+   */
+  getSpecsDictionary: (
+    categoryId?: string | number,
+  ): Promise<ApiResponse<{ specs: SpecDictionaryItem[] }>> => {
+    const params = new URLSearchParams()
+    if (categoryId) params.set('category_id', String(categoryId))
+    const query = params.toString()
+    return fetchApi(`/products/specs/dictionary${query ? `?${query}` : ''}`)
   },
 
   /**

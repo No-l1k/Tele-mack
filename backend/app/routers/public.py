@@ -1,13 +1,14 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Order, OrderItem, Product, Setting
+from ..rate_limit import rate_limit
 from ..schemas import ApiResponse, ContactRequestIn, QuickOrderCreateIn
 from ..services.notifications import email_notifications_enabled, send_contact_request_email, send_new_order_email
-from ..services.order_numbers import allocate_next_order_id
+from ..services.order_numbers import order_insert_id
 from ..services.products import product_available_for_order
 from ..services.store_settings import min_order_subtotal_rub, normalize_delivery_info
 from ..services.tv_checkout_services import resolve_courier_delivery_cost
@@ -76,7 +77,8 @@ def get_public_store_settings(db: Session = Depends(get_db)):
 
 
 @router.post("/contact", response_model=ApiResponse)
-def send_contact_request(payload: ContactRequestIn):
+def send_contact_request(payload: ContactRequestIn, request: Request):
+    rate_limit(request, key="public_contact", max_requests=5, window_seconds=60)
     if not email_notifications_enabled():
         raise HTTPException(status_code=503, detail="Отправка сообщений временно недоступна")
 
@@ -96,7 +98,8 @@ def send_contact_request(payload: ContactRequestIn):
 
 
 @router.post("/quick-order", response_model=ApiResponse)
-def create_quick_order(payload: QuickOrderCreateIn, db: Session = Depends(get_db)):
+def create_quick_order(payload: QuickOrderCreateIn, request: Request, db: Session = Depends(get_db)):
+    rate_limit(request, key="public_quick_order", max_requests=8, window_seconds=60)
     product = db.query(Product).filter(Product.id == payload.productId).with_for_update().first()
     if not product:
         raise HTTPException(status_code=404, detail="Товар не найден")
@@ -117,7 +120,7 @@ def create_quick_order(payload: QuickOrderCreateIn, db: Session = Depends(get_db
     delivery_cost = resolve_courier_delivery_cost({product.id: product}, {product.id: quantity})
 
     order = Order(
-        id=allocate_next_order_id(db),
+        **order_insert_id(db),
         status="pending",
         total=line_total + delivery_cost,
         payment_status="pending",

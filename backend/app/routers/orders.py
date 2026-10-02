@@ -2,7 +2,7 @@ import hashlib
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -15,7 +15,8 @@ from ..services.csv_export import excel_csv_response
 from ..services.notifications import email_notifications_enabled, send_new_order_email
 from ..services.order_computation import compute_order
 from ..services.orders import order_to_dict
-from ..services.order_numbers import allocate_next_order_id
+from ..rate_limit import rate_limit
+from ..services.order_numbers import order_insert_id
 from ..services.store_settings import min_order_subtotal_rub
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -68,7 +69,8 @@ def list_orders(
 
 
 @router.post("", response_model=ApiResponse)
-def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
+def create_order(payload: OrderCreate, request: Request, db: Session = Depends(get_db)):
+    rate_limit(request, key="orders_create", max_requests=12, window_seconds=60)
     if payload.paymentMethod not in ALLOWED_PAYMENT_METHODS:
         raise HTTPException(status_code=400, detail="Неверный способ оплаты")
     if payload.deliveryMethod not in ALLOWED_DELIVERY_METHODS:
@@ -104,7 +106,7 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
             order_user_id = created_user.id
 
     order = Order(
-        id=allocate_next_order_id(db),
+        **order_insert_id(db),
         user_id=order_user_id,
         status="pending",
         total=computed.total,
@@ -311,7 +313,8 @@ def export_orders(
 
 
 @router.get("/public/{order_id}", response_model=ApiResponse)
-def get_public_order(order_id: int, token: str, db: Session = Depends(get_db)):
+def get_public_order(order_id: int, token: str, request: Request, db: Session = Depends(get_db)):
+    rate_limit(request, key="orders_public_get", max_requests=30, window_seconds=60)
     order = (
         db.query(Order)
         .options(selectinload(Order.items).joinedload(OrderItem.product))
@@ -326,7 +329,10 @@ def get_public_order(order_id: int, token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/public/lookup", response_model=ApiResponse)
-def lookup_public_order(payload: OrderPublicLookupIn, db: Session = Depends(get_db)):
+def lookup_public_order(payload: OrderPublicLookupIn, request: Request, db: Session = Depends(get_db)):
+    rate_limit(request, key="orders_lookup", max_requests=8, window_seconds=60)
+    phone_key = _normalize_phone(payload.phone) or "unknown"
+    rate_limit(request, key="orders_lookup_phone", max_requests=8, window_seconds=60, by=phone_key)
     order = db.query(Order).filter(Order.id == payload.orderNumber).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")

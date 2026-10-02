@@ -16,6 +16,7 @@ export interface Product {
   sku?: string
   gtin?: string
   specs: Record<string, string | string[] | number | boolean>
+  specHints?: Record<string, string>
   inStock: boolean
   stockStatus: 'in_stock' | 'low_stock' | 'preorder' | 'out_of_stock'
   ratingMode?: 'manual' | 'auto'
@@ -53,6 +54,19 @@ export interface Category {
   productCount: number
   order: number
   children?: Category[]
+}
+
+export interface SpecDictionaryValue {
+  value: string
+  usageCount: number
+}
+
+export interface SpecDictionaryItem {
+  name: string
+  usageCount: number
+  inCategory: boolean
+  values: SpecDictionaryValue[]
+  hint?: string
 }
 
 // Cart Types

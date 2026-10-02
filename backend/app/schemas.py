@@ -83,6 +83,7 @@ class ProductBase(BaseModel):
     variantValue: str | None = None
     metaTitle: str | None = None
     metaDescription: str | None = None
+    specHints: dict[str, str] = Field(default_factory=dict)
 
 
 class ProductImagesReorderIn(BaseModel):
@@ -126,6 +127,7 @@ class ProductUpdateIn(BaseModel):
     variantValue: str | None = None
     metaTitle: str | None = None
     metaDescription: str | None = None
+    specHints: dict[str, str] | None = None
 
 
 class ProductOut(ProductBase):

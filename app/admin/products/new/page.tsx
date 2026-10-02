@@ -22,7 +22,7 @@ import {
   DescriptionBlocksEditor,
   type DescriptionBlocksEditorHandle,
 } from '@/components/admin/description-blocks-editor'
-import { ProductSpecsEditor, type SpecRow } from '@/components/admin/product-specs-editor'
+import { ProductSpecsEditor, specHintsFromRows, type SpecRow } from '@/components/admin/product-specs-editor'
 import { ProductCategoriesEditor } from '@/components/admin/product-categories-editor'
 import { injectUploadedImageUrls } from '@/lib/description-blocks'
 import { PRODUCT_IMAGE_GUIDELINE } from '@/lib/admin-product-images'
@@ -76,7 +76,7 @@ export default function NewProductPage() {
   const [serviceInfoHtml, setServiceInfoHtml] = useState('')
   const [ratingMode, setRatingMode] = useState<'manual' | 'auto'>('manual')
   const [isLoading, setIsLoading] = useState(false)
-  const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '' }])
+  const [specRows, setSpecRows] = useState<SpecRow[]>([{ id: 'spec-1', key: '', value: '', hint: '' }])
   const [additionalOpen, setAdditionalOpen] = useState(false)
   const [seoOpen, setSeoOpen] = useState(false)
   const [metaTitle, setMetaTitle] = useState('')
@@ -140,6 +140,7 @@ export default function NewProductPage() {
         sku: String(payload.get('sku') || '').trim() || undefined,
         gtin: String(payload.get('gtin') || '').trim() || undefined,
         specs,
+        specHints: specHintsFromRows(specRows),
         inStock: ['in_stock', 'low_stock'].includes(String(payload.get('stockStatus') || 'in_stock')),
         stockStatus: String(payload.get('stockStatus') || 'in_stock') as 'in_stock' | 'low_stock' | 'preorder' | 'out_of_stock',
         isNew: payload.get('isNew') === 'on',

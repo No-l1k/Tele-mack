@@ -32,11 +32,19 @@ from ..services.product_categories import (
     sync_product_category_memberships,
 )
 from ..services.products import product_in_stock_from_status, product_to_dict
+from ..services.spec_hints import attach_hints_to_dictionary, load_all_hints, load_hints_map, upsert_spec_hints
+from ..services.specs_dictionary import build_specs_dictionary, preserve_internal_specs
 
 router = APIRouter(prefix="/products", tags=["products"])
 VALID_STOCK_STATUSES = {"in_stock", "low_stock", "preorder", "out_of_stock"}
 VALID_RATING_MODES = {"manual", "auto"}
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _product_detail_payload(db: Session, product: Product) -> dict:
+    payload = product_to_dict(product)
+    payload["specHints"] = load_hints_map(db, payload.get("specs", {}).keys())
+    return payload
 
 
 def _collect_descendant_ids(db: Session, root_id: int) -> list[int]:
@@ -486,6 +494,37 @@ def get_brands(limit: int = Query(default=24, ge=1, le=200), db: Session = Depen
     return ApiResponse(data=[item[0] for item in rows])
 
 
+@router.get("/specs/dictionary", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])
+def get_specs_dictionary(
+    category_id: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+):
+    """Подсказки характеристик для админки: названия и значения сгруппированы по ключу."""
+    in_category_ids: set[int] = set()
+    if category_id is not None:
+        category = db.query(Category).filter(Category.id == category_id).first()
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
+        category_ids = _collect_descendant_ids(db, category_id)
+        membership_ids = {
+            item[0]
+            for item in db.query(ProductCategory.product_id)
+            .filter(ProductCategory.category_id.in_(category_ids))
+            .all()
+        }
+        primary_ids = {
+            item[0] for item in db.query(Product.id).filter(Product.category_id.in_(category_ids)).all()
+        }
+        in_category_ids = membership_ids | primary_ids
+
+    rows = db.query(Product.id, Product.specs).all()
+    dictionary = build_specs_dictionary(
+        (specs, product_id in in_category_ids) for product_id, specs in rows
+    )
+    dictionary = attach_hints_to_dictionary(dictionary, load_all_hints(db))
+    return ApiResponse(data={"specs": dictionary})
+
+
 @router.get("/filters/meta", response_model=ApiResponse)
 def get_product_filters_meta(
     category: str | None = None,
@@ -562,7 +601,7 @@ def get_product_by_slug(slug: str, db: Session = Depends(get_db)):
     product = db.query(Product).options(*product_load_options()).filter(Product.slug == slug).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return ApiResponse(data=product_to_dict(product))
+    return ApiResponse(data=_product_detail_payload(db, product))
 
 
 @router.get("/export", dependencies=[Depends(get_current_admin)])
@@ -593,7 +632,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return ApiResponse(data=product_to_dict(product))
+    return ApiResponse(data=_product_detail_payload(db, product))
 
 
 @router.get("/{product_id}/related", response_model=ApiResponse)
@@ -762,12 +801,13 @@ def create_product(payload: ProductBase, db: Session = Depends(get_db)):
             category_ids=category_ids,
             primary_category_id=payload.categoryId,
         )
+        upsert_spec_hints(db, payload.specHints)
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Product with this slug already exists") from None
     product = db.query(Product).options(*product_load_options()).filter(Product.id == product.id).first()
-    return ApiResponse(data=product_to_dict(product))
+    return ApiResponse(data=_product_detail_payload(db, product))
 
 
 @router.post("/{product_id}/images", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])
@@ -918,6 +958,7 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
     if payload.specs is not None:
         existing_images = (product.specs or {}).get("images", [])
         clean_specs = {key: value for key, value in payload.specs.items() if key != "images"}
+        clean_specs = preserve_internal_specs(product.specs, clean_specs)
         if existing_images:
             clean_specs["images"] = existing_images
         product.specs = clean_specs
@@ -963,6 +1004,8 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
         product.meta_title = (payload.metaTitle or "").strip() or None
     if payload.metaDescription is not None:
         product.meta_description = (payload.metaDescription or "").strip() or None
+    if payload.specHints is not None:
+        upsert_spec_hints(db, payload.specHints)
     if payload.price is not None and payload.price < 0:
         raise HTTPException(status_code=400, detail="Price must be >= 0")
     try:
@@ -971,7 +1014,7 @@ def update_product(product_id: int, payload: ProductUpdateIn, db: Session = Depe
         db.rollback()
         raise HTTPException(status_code=409, detail="Product with this slug already exists") from None
     product = db.query(Product).options(*product_load_options()).filter(Product.id == product_id).first()
-    return ApiResponse(data=product_to_dict(product))
+    return ApiResponse(data=_product_detail_payload(db, product))
 
 
 @router.delete("/{product_id}", response_model=ApiResponse, dependencies=[Depends(get_current_admin)])

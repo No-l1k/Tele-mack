@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { SpecHintPopover } from '@/components/product/spec-hint-popover'
 import type { Category, Product } from '@/types'
 
 type ProductPageClientProps = {
@@ -480,8 +481,13 @@ export default function ProductPageClient({
                   <tbody>
                     {Object.entries(product.specs).map(([key, value], index) => (
                       <tr key={key} className={index % 2 === 0 ? 'bg-background' : ''}>
-                        <td className="px-4 py-3 text-sm text-muted-foreground w-1/3">{key}</td>
-                        <td className="px-4 py-3 text-sm font-medium">{value}</td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground w-1/3">
+                          <span className="inline-flex items-center gap-2">
+                            {key}
+                            <SpecHintPopover specName={key} hint={product.specHints?.[key] || ''} />
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium">{String(value)}</td>
                       </tr>
                     ))}
                   </tbody>
