@@ -19,7 +19,7 @@ from ..schemas import ApiResponse, SpecTemplatesUpdateIn, StoreSettingsUpdateIn
 from ..rate_limit import rate_limit
 from ..services.checkout_services import DEFAULT_CHECKOUT_SERVICES, normalize_checkout_services
 from ..services.product_categories import sync_product_category_memberships
-from ..services.store_settings import normalize_delivery_info
+from ..services.store_settings import build_hero_banner, normalize_delivery_info, normalize_hero_banners
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
 IMPORT_JOBS_LOCK = threading.Lock()
@@ -34,31 +34,9 @@ DEFAULT_STORE_SETTINGS = {
     "deliveryInfo": {"moscowFree": True, "moscowMinSum": 4000, "regionCostPerKm": 70, "deliveryDays": "1-3 дня"},
     "paymentMethods": {"cash": True, "card": True, "cardSurcharge": 15, "pickup": True},
     "social": {"whatsapp": "+79000000000", "telegram": "@telemakc"},
-    "heroBanners": [
-        {"image": "https://images.unsplash.com/photo-1593784991095-a205069470b6?w=1200&q=80", "href": "/catalog/televizory"},
-        {"image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=1200&q=80", "href": "/catalog/televizory"},
-        {"image": "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=1200&q=80", "href": "/catalog/saundbary"},
-    ],
+    "heroBanners": [],
     "checkoutServices": DEFAULT_CHECKOUT_SERVICES,
 }
-
-
-def _normalize_hero_banners(value: object) -> list[dict[str, str]]:
-    items = value if isinstance(value, list) else []
-    normalized: list[dict[str, str]] = []
-    for item in items:
-        if isinstance(item, str):
-            image = item.strip()
-            if image:
-                normalized.append({"image": image, "href": ""})
-            continue
-        if isinstance(item, dict):
-            image = str(item.get("image", "")).strip()
-            if not image:
-                continue
-            href = str(item.get("href", "")).strip()
-            normalized.append({"image": image, "href": href})
-    return normalized
 
 
 @router.get("/stats", response_model=ApiResponse)
@@ -146,7 +124,7 @@ def get_settings(db: Session = Depends(get_db)):
         db.refresh(row)
     settings_data = dict(row.value or {})
     settings_data["deliveryInfo"] = normalize_delivery_info(settings_data.get("deliveryInfo"))
-    settings_data["heroBanners"] = _normalize_hero_banners(settings_data.get("heroBanners"))
+    settings_data["heroBanners"] = normalize_hero_banners(settings_data.get("heroBanners"))
     raw_services = settings_data.get("checkoutServices")
     settings_data["checkoutServices"] = normalize_checkout_services(
         raw_services if "checkoutServices" in settings_data else None
@@ -170,7 +148,7 @@ def update_settings(payload: StoreSettingsUpdateIn, db: Session = Depends(get_db
     payload_data = payload.model_dump(exclude_unset=True)
     settings_data.update(payload_data)
     if "heroBanners" in payload_data:
-        settings_data["heroBanners"] = _normalize_hero_banners(payload_data.get("heroBanners"))
+        settings_data["heroBanners"] = normalize_hero_banners(payload_data.get("heroBanners"))
     if "checkoutServices" in payload_data:
         settings_data["checkoutServices"] = normalize_checkout_services(payload_data.get("checkoutServices"))
     if "deliveryInfo" in payload_data or "deliveryInfo" in settings_data:
@@ -181,8 +159,80 @@ def update_settings(payload: StoreSettingsUpdateIn, db: Session = Depends(get_db
     return ApiResponse(data=row.value)
 
 
+def _hero_upload_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _hero_upload_urls(banners: list[dict]) -> set[str]:
+    urls: set[str] = set()
+    for item in banners:
+        image = str(item.get("image") or "").strip()
+        mobile = str(item.get("mobileImage") or "").strip()
+        if image:
+            urls.add(image)
+        if mobile:
+            urls.add(mobile)
+    return urls
+
+
+def _unlink_hero_upload(url: str) -> None:
+    allowed_prefixes = ("/uploads/banners/", "/uploads/hero/")
+    if not url.startswith(allowed_prefixes):
+        return
+    root = _hero_upload_root()
+    target = (root / url.lstrip("/")).resolve()
+    try:
+        target.relative_to(root.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некорректный путь к файлу") from None
+    if target.is_file():
+        target.unlink()
+        return
+    if url.startswith("/uploads/banners/"):
+        alt = url.replace("/uploads/banners/", "/uploads/hero/", 1)
+        alt_target = (root / alt.lstrip("/")).resolve()
+        try:
+            alt_target.relative_to(root.resolve())
+        except ValueError:
+            return
+        if alt_target.is_file():
+            alt_target.unlink()
+
+
+def _unlink_unused_hero_uploads(previous: list[dict], current: list[dict]) -> None:
+    leftover = _hero_upload_urls(previous) - _hero_upload_urls(current)
+    for url in leftover:
+        _unlink_hero_upload(url)
+
+
+async def _save_hero_upload_file(image: UploadFile) -> str:
+    allowed_mime_types = {item.strip() for item in settings.allowed_image_mime_types.split(",") if item.strip()}
+    ext = Path(image.filename or "").suffix.lower() or ".jpg"
+    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+    if image.content_type not in allowed_mime_types:
+        raise HTTPException(status_code=400, detail=f"Unsupported content type: {image.content_type}")
+
+    content = await image.read()
+    if len(content) > settings.max_upload_size_bytes:
+        raise HTTPException(status_code=413, detail=f"File is too large: {image.filename}")
+
+    # Не «banners» в URL: браузерные блокировщики режут пути с /banner(s)/ как рекламу (net::ERR_BLOCKED_BY_CLIENT).
+    upload_dir = _hero_upload_root() / "uploads" / "hero"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"hero-{uuid4().hex}{ext}"
+    (upload_dir / filename).write_bytes(content)
+    return f"/uploads/hero/{filename}"
+
+
 @router.post("/settings/hero-images", response_model=ApiResponse)
-async def upload_hero_images(request: Request, images: list[UploadFile] = File(...), db: Session = Depends(get_db)):
+async def upload_hero_images(
+    request: Request,
+    images: list[UploadFile] = File(...),
+    bannerId: str | None = None,
+    slot: str = "desktop",
+    db: Session = Depends(get_db),
+):
     rate_limit(request, key="admin_hero_upload", max_requests=15, window_seconds=60)
     row = db.query(Setting).filter(Setting.key == "store").first()
     if not row:
@@ -191,35 +241,48 @@ async def upload_hero_images(request: Request, images: list[UploadFile] = File(.
         db.flush()
 
     settings_data = dict(row.value or {})
-    existing_images = _normalize_hero_banners(settings_data.get("heroBanners"))
-    allowed_mime_types = {item.strip() for item in settings.allowed_image_mime_types.split(",") if item.strip()}
-    # Не «banners» в URL: браузерные блокировщики режут пути с /banner(s)/ как рекламу (net::ERR_BLOCKED_BY_CLIENT).
-    upload_dir = Path(__file__).resolve().parents[2] / "uploads" / "hero"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    uploaded_urls: list[str] = []
+    existing = normalize_hero_banners(settings_data.get("heroBanners"))
+    slot_name = (slot or "desktop").strip().lower()
+    if slot_name not in {"desktop", "mobile"}:
+        raise HTTPException(status_code=400, detail="slot must be desktop or mobile")
 
     if len(images) > 20:
         raise HTTPException(status_code=400, detail="Too many images in one request")
-    for image in images:
-        ext = Path(image.filename or "").suffix.lower() or ".jpg"
-        if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
-            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
-        if image.content_type not in allowed_mime_types:
-            raise HTTPException(status_code=400, detail=f"Unsupported content type: {image.content_type}")
 
-        content = await image.read()
-        if len(content) > settings.max_upload_size_bytes:
-            raise HTTPException(status_code=413, detail=f"File is too large: {image.filename}")
+    previous = [{**item} for item in existing]
 
-        filename = f"hero-{uuid4().hex}{ext}"
-        file_path = upload_dir / filename
-        file_path.write_bytes(content)
-        uploaded_urls.append(f"/uploads/hero/{filename}")
+    if bannerId:
+        if len(images) != 1:
+            raise HTTPException(status_code=400, detail="Send one file when replacing a banner image")
+        target_id = bannerId.strip()
+        updated = False
+        next_banners: list[dict] = []
+        for item in existing:
+            if str(item.get("id") or "") != target_id:
+                next_banners.append(item)
+                continue
+            uploaded_url = await _save_hero_upload_file(images[0])
+            replaced = {**item}
+            if slot_name == "mobile":
+                replaced["mobileImage"] = uploaded_url
+            else:
+                replaced["image"] = uploaded_url
+            next_banners.append(replaced)
+            updated = True
+        if not updated:
+            raise HTTPException(status_code=404, detail="Image not found")
+        settings_data["heroBanners"] = next_banners
+    else:
+        uploaded: list[dict] = []
+        for image in images:
+            uploaded_url = await _save_hero_upload_file(image)
+            uploaded.append(build_hero_banner(uploaded_url))
+        settings_data["heroBanners"] = [*existing, *uploaded]
 
-    settings_data["heroBanners"] = [*existing_images, *({"image": url, "href": ""} for url in uploaded_urls)]
     row.value = settings_data
     db.commit()
     db.refresh(row)
+    _unlink_unused_hero_uploads(previous, settings_data["heroBanners"])
     return ApiResponse(data=settings_data["heroBanners"])
 
 
@@ -230,43 +293,29 @@ def delete_hero_image(url: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Settings not found")
 
     settings_data = dict(row.value or {})
-    current = _normalize_hero_banners(settings_data.get("heroBanners"))
-    if not any(item.get("image") == url for item in current):
-        raise HTTPException(status_code=404, detail="Image not found")
-
+    current = normalize_hero_banners(settings_data.get("heroBanners"))
+    previous = [dict(item) for item in current]
+    next_banners: list[dict] = []
     removed = False
-    next_banners: list[dict[str, str]] = []
     for item in current:
         if not removed and item.get("image") == url:
             removed = True
             continue
+        if not removed and item.get("mobileImage") == url:
+            item = dict(item)
+            item["mobileImage"] = ""
+            next_banners.append(item)
+            removed = True
+            continue
         next_banners.append(item)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Image not found")
+
     settings_data["heroBanners"] = next_banners
     row.value = settings_data
     db.commit()
     db.refresh(row)
-
-    allowed_prefixes = ("/uploads/banners/", "/uploads/hero/")
-    if url.startswith(allowed_prefixes):
-        root = Path(__file__).resolve().parents[2]
-        target = (root / url.lstrip("/")).resolve()
-        try:
-            target.relative_to(root.resolve())
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Некорректный путь к файлу") from None
-        if target.is_file():
-            target.unlink()
-        elif url.startswith("/uploads/banners/"):
-            alt = url.replace("/uploads/banners/", "/uploads/hero/", 1)
-            alt_target = (root / alt.lstrip("/")).resolve()
-            try:
-                alt_target.relative_to(root.resolve())
-            except ValueError:
-                pass
-            else:
-                if alt_target.is_file():
-                    alt_target.unlink()
-
+    _unlink_unused_hero_uploads(previous, next_banners)
     return ApiResponse(data=settings_data["heroBanners"])
 
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ApiResponse(BaseModel):
@@ -259,8 +259,26 @@ class ReviewCreateIn(BaseModel):
 
 
 class HeroBannerIn(BaseModel):
+    id: str | None = None
     image: str
+    mobileImage: str | None = ""
     href: str | None = ""
+    alt: str | None = ""
+    enabled: bool = True
+
+    @field_validator("href", mode="before")
+    @classmethod
+    def clean_href(cls, value: object) -> str:
+        from .services.store_settings import sanitize_hero_href
+
+        return sanitize_hero_href(value)
+
+    @field_validator("alt", mode="before")
+    @classmethod
+    def clean_alt(cls, value: object) -> str:
+        from .services.store_settings import sanitize_hero_alt
+
+        return sanitize_hero_alt(value)
 
 
 class CheckoutServiceIn(BaseModel):

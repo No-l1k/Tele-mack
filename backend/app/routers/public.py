@@ -10,7 +10,7 @@ from ..schemas import ApiResponse, ContactRequestIn, QuickOrderCreateIn
 from ..services.notifications import email_notifications_enabled, send_contact_request_email, send_new_order_email
 from ..services.order_numbers import order_insert_id
 from ..services.products import product_available_for_order
-from ..services.store_settings import min_order_subtotal_rub, normalize_delivery_info
+from ..services.store_settings import min_order_subtotal_rub, normalize_delivery_info, normalize_hero_banners
 from ..services.tv_checkout_services import resolve_courier_delivery_cost
 from ..services.checkout_services import DEFAULT_CHECKOUT_SERVICES, normalize_checkout_services
 
@@ -31,24 +31,6 @@ DEFAULT_STORE_SETTINGS = {
 }
 
 
-def _normalize_hero_banners(value: object) -> list[dict[str, str]]:
-    items = value if isinstance(value, list) else []
-    normalized: list[dict[str, str]] = []
-    for item in items:
-        if isinstance(item, str):
-            image = item.strip()
-            if image:
-                normalized.append({"image": image, "href": ""})
-            continue
-        if isinstance(item, dict):
-            image = str(item.get("image", "")).strip()
-            if not image:
-                continue
-            href = str(item.get("href", "")).strip()
-            normalized.append({"image": image, "href": href})
-    return normalized
-
-
 @router.get("/settings", response_model=ApiResponse)
 def get_public_store_settings(db: Session = Depends(get_db)):
     row = db.query(Setting).filter(Setting.key == "store").first()
@@ -61,7 +43,7 @@ def get_public_store_settings(db: Session = Depends(get_db)):
     normalized_delivery = normalize_delivery_info(settings_data.get("deliveryInfo"))
     if settings_data.get("deliveryInfo") != normalized_delivery:
         settings_data["deliveryInfo"] = normalized_delivery
-    settings_data["heroBanners"] = _normalize_hero_banners(settings_data.get("heroBanners"))
+    settings_data["heroBanners"] = normalize_hero_banners(settings_data.get("heroBanners"))
     raw_services = settings_data.get("checkoutServices")
     settings_data["checkoutServices"] = normalize_checkout_services(
         raw_services if "checkoutServices" in settings_data else None
@@ -73,7 +55,11 @@ def get_public_store_settings(db: Session = Depends(get_db)):
         flag_modified(row, "value")
         db.commit()
         db.refresh(row)
-    return ApiResponse(data=row.value)
+    response_data = dict(row.value or settings_data)
+    response_data["heroBanners"] = [
+        item for item in (response_data.get("heroBanners") or []) if item.get("enabled", True)
+    ]
+    return ApiResponse(data=response_data)
 
 
 @router.post("/contact", response_model=ApiResponse)

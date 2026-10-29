@@ -776,8 +776,12 @@ export interface StoreSettings {
 }
 
 export interface HeroBanner {
+  id: string
   image: string
+  mobileImage?: string
   href?: string
+  alt?: string
+  enabled: boolean
 }
 
 export interface CheckoutService {
@@ -807,15 +811,27 @@ export const settingsApi = {
     })
   },
 
-  uploadHeroImages: async (files: File[]): Promise<ApiResponse<HeroBanner[]>> => {
+  uploadHeroImages: async (
+    files: File[],
+    options?: { bannerId: string; slot: 'desktop' | 'mobile' }
+  ): Promise<ApiResponse<HeroBanner[]>> => {
     const formData = new FormData()
     files.forEach((file) => formData.append('images', file))
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-    const response = await fetch(`${getApiBaseUrl()}/admin/settings/hero-images`, {
-      method: 'POST',
-      body: formData,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    const params = new URLSearchParams()
+    if (options?.bannerId) {
+      params.set('bannerId', options.bannerId)
+      params.set('slot', options.slot)
+    }
+    const query = params.toString()
+    const response = await fetch(
+      `${getApiBaseUrl()}/admin/settings/hero-images${query ? `?${query}` : ''}`,
+      {
+        method: 'POST',
+        body: formData,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    )
     const body = await response.json().catch(() => ({}))
     if (!response.ok) {
       throw new Error(formatApiErrorBody(body) || `HTTP ${response.status}`)

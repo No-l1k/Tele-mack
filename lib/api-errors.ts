@@ -40,6 +40,11 @@ const DETAIL_TRANSLATIONS: Record<string, string> = {
   'Phone and name are required': 'Укажите телефон и имя',
   'Quantity must be greater than 0': 'Количество должно быть больше 0',
   'Rating must be between 1 and 5': 'Оценка должна быть от 1 до 5',
+  'Too many images in one request': 'Слишком много файлов за один раз',
+  'Send one file when replacing a banner image': 'Для замены загрузите один файл',
+  'slot must be desktop or mobile': 'Некорректный тип изображения баннера',
+  'Image not found': 'Изображение не найдено',
+  'Settings not found': 'Настройки не найдены',
   Forbidden: 'Доступ запрещён',
   'Admin access required': 'Требуются права администратора',
 }
@@ -102,7 +107,17 @@ export function translateValidationIssue(issue: ValidationIssue): string {
 }
 
 function translateDetailString(detail: string): string {
-  return DETAIL_TRANSLATIONS[detail] ?? detail
+  if (DETAIL_TRANSLATIONS[detail]) return DETAIL_TRANSLATIONS[detail]
+  if (detail.startsWith('Unsupported file type') || detail.startsWith('Unsupported content type')) {
+    return 'Неподдерживаемый тип файла. Нужны JPEG, PNG или WebP'
+  }
+  if (detail.startsWith('File is too large')) {
+    return 'Файл больше 5 МБ'
+  }
+  if (detail.startsWith('Too many images')) {
+    return 'Слишком много файлов за один раз'
+  }
+  return detail
 }
 
 export function formatApiErrorBody(body: unknown): string {

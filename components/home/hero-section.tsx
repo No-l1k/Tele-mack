@@ -7,6 +7,37 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveMediaUrl } from '@/lib/media'
 import { publicSettingsApi, type HeroBanner } from '@/lib/api'
+import { isValidHeroHref, normalizeHeroBanners } from '@/lib/hero-banners'
+
+function SlideImages({ slide, index }: { slide: HeroBanner; index: number }) {
+  const alt = slide.alt?.trim() || `Баннер ${index + 1}`
+  const hasMobile = Boolean(slide.mobileImage)
+
+  return (
+    <>
+      <Image
+        src={slide.image}
+        alt={alt}
+        fill
+        sizes="(max-width: 1024px) 100vw, min(1200px, 85vw)"
+        className={cn('object-cover', hasMobile && 'hidden sm:block')}
+        priority={index === 0}
+        unoptimized
+      />
+      {hasMobile ? (
+        <Image
+          src={slide.mobileImage as string}
+          alt={alt}
+          fill
+          sizes="100vw"
+          className="object-cover sm:hidden"
+          priority={index === 0}
+          unoptimized
+        />
+      ) : null}
+    </>
+  )
+}
 
 export function HeroSection() {
   const [currentSlide, setCurrentSlide] = useState(0)
@@ -18,13 +49,16 @@ export function HeroSection() {
     ;(async () => {
       try {
         const response = await publicSettingsApi.get()
-        const banners = Array.isArray(response.data.heroBanners)
-          ? response.data.heroBanners
-              .filter((item): item is HeroBanner => Boolean(item && typeof item.image === 'string' && item.image.trim()))
-              .map((item) => ({ image: resolveMediaUrl(item.image), href: item.href || '' }))
-          : []
+        const banners = normalizeHeroBanners(response.data.heroBanners)
+          .filter((item) => item.enabled !== false)
+          .map((item) => ({
+            ...item,
+            image: resolveMediaUrl(item.image),
+            mobileImage: item.mobileImage ? resolveMediaUrl(item.mobileImage) : '',
+          }))
         if (!cancelled) {
-          setSlides(banners.length ? banners : [])
+          setSlides(banners)
+          setCurrentSlide(0)
         }
       } catch {
         if (!cancelled) {
@@ -68,41 +102,29 @@ export function HeroSection() {
             />
           ) : (
             <>
-              {slides.map((slide, index) => (
-                <div
-                  key={`${slide.image}-${index}`}
-                  className={cn(
-                    'absolute inset-0 transition-opacity duration-700',
-                    index === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                  )}
-                >
-                  {slide.href ? (
-                    <Link href={slide.href} className="relative block h-full w-full cursor-pointer" aria-label={`Перейти по баннеру ${index + 1}`}>
-                      <Image
-                        src={slide.image}
-                        alt={`Баннер ${index + 1}`}
-                        fill
-                        sizes="(max-width: 1024px) 100vw, min(1200px, 85vw)"
-                        className="object-cover"
-                        priority={index === 0}
-                        unoptimized
-                      />
-                    </Link>
-                  ) : (
-                    <div className="relative h-full w-full">
-                      <Image
-                        src={slide.image}
-                        alt={`Баннер ${index + 1}`}
-                        fill
-                        sizes="(max-width: 1024px) 100vw, min(1200px, 85vw)"
-                        className="object-cover"
-                        priority={index === 0}
-                        unoptimized
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
+              {slides.map((slide, index) => {
+                const alt = slide.alt?.trim() || `Баннер ${index + 1}`
+                const clickable = Boolean(slide.href && isValidHeroHref(slide.href))
+                return (
+                  <div
+                    key={slide.id || `${slide.image}-${index}`}
+                    className={cn(
+                      'absolute inset-0 transition-opacity duration-700',
+                      index === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                    )}
+                  >
+                    {clickable ? (
+                      <Link href={slide.href as string} className="relative block h-full w-full cursor-pointer" aria-label={alt}>
+                        <SlideImages slide={slide} index={index} />
+                      </Link>
+                    ) : (
+                      <div className="relative h-full w-full">
+                        <SlideImages slide={slide} index={index} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
 
               {slides.length > 1 && (
                 <>
@@ -124,10 +146,10 @@ export function HeroSection() {
                   </button>
 
                   <div className="absolute bottom-2 md:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 md:gap-2">
-                    {slides.map((_, index) => (
+                    {slides.map((slide, index) => (
                       <button
                         type="button"
-                        key={index}
+                        key={slide.id || index}
                         onClick={() => setCurrentSlide(index)}
                         className={cn(
                           'h-1.5 md:h-2 rounded-full transition-all',
@@ -135,7 +157,7 @@ export function HeroSection() {
                             ? 'w-4 md:w-6 bg-white'
                             : 'w-1.5 md:w-2 bg-white/50 hover:bg-white/70'
                         )}
-                        aria-label={`Слайд ${index + 1}`}
+                        aria-label={slide.alt?.trim() || `Слайд ${index + 1}`}
                       />
                     ))}
                   </div>
